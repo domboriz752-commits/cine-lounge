@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import profileRoutes from "./routes/profiles.js";
 import interactionRoutes from "./routes/interactions.js";
 import aiRoutes from "./routes/ai.js";
+import filmRoutes from "./routes/films.js";
 import { read, getDbPath } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,6 +26,7 @@ app.use("/storage/films", express.static(STORAGE_DIR, { acceptRanges: true }));
 // ── API Routes ──
 app.use("/api/profiles", profileRoutes);
 app.use("/api/profiles", interactionRoutes);
+app.use("/api/films", filmRoutes);
 app.use("/api/films", aiRoutes);
 
 // ── Export DB ──

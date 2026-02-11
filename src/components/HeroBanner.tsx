@@ -1,23 +1,27 @@
 import { Play, Plus, Check, Info } from "lucide-react";
-import { heroFilm, formatDuration } from "@/data/mockFilms";
+import { type Film, filmTitle, filmVideoUrl, filmPosterColor, formatDuration } from "@/data/mockFilms";
 import { useProfile } from "@/contexts/ProfileContext";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import heroBackdrop from "@/assets/hero-backdrop.jpg";
 
-export default function HeroBanner() {
+interface HeroBannerProps {
+  films: Film[];
+}
+
+export default function HeroBanner({ films }: HeroBannerProps) {
   const { toggleMyList, isInMyList } = useProfile();
   const navigate = useNavigate();
-  const film = heroFilm;
+
+  if (!films.length) return null;
+  const film = films[0];
+  const title = filmTitle(film);
   const inList = isInMyList(film.id);
+  const duration = film.runtimeSec || film.duration || 0;
 
   return (
     <div className="relative h-[70vh] w-full md:h-[85vh]">
-      <img
-        src={heroBackdrop}
-        alt={film.title}
-        className="absolute inset-0 h-full w-full object-cover"
-      />
+      {/* Dark gradient background */}
+      <div className={`absolute inset-0 bg-gradient-to-br ${filmPosterColor(film)}`} />
       <div className="hero-gradient-bottom absolute inset-0" />
       <div className="hero-gradient-left absolute inset-0" />
 
@@ -28,7 +32,7 @@ export default function HeroBanner() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          {film.title}
+          {title}
         </motion.h1>
         <motion.div
           className="mb-3 flex items-center gap-3 text-sm text-muted-foreground"
@@ -36,18 +40,20 @@ export default function HeroBanner() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2, duration: 0.5 }}
         >
-          <span className="font-medium text-primary">{film.year}</span>
-          <span>{formatDuration(film.duration)}</span>
-          <span>{film.genres.join(" · ")}</span>
+          {film.year > 0 && <span className="font-medium text-primary">{film.year}</span>}
+          {duration > 0 && <span>{formatDuration(duration)}</span>}
+          {film.genres?.length > 0 && <span>{film.genres.join(" · ")}</span>}
         </motion.div>
-        <motion.p
-          className="mb-5 line-clamp-3 text-sm leading-relaxed text-foreground/80 md:text-base"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3, duration: 0.5 }}
-        >
-          {film.description}
-        </motion.p>
+        {film.description && (
+          <motion.p
+            className="mb-5 line-clamp-3 text-sm leading-relaxed text-foreground/80 md:text-base"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+          >
+            {film.description}
+          </motion.p>
+        )}
         <motion.div
           className="flex items-center gap-3"
           initial={{ opacity: 0, y: 10 }}
@@ -67,12 +73,6 @@ export default function HeroBanner() {
           >
             {inList ? <Check size={18} /> : <Plus size={18} />}
             My List
-          </button>
-          <button
-            onClick={() => navigate(`/film/${film.id}`)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-muted-foreground/40 text-foreground transition-colors hover:border-foreground"
-          >
-            <Info size={18} />
           </button>
         </motion.div>
       </div>
