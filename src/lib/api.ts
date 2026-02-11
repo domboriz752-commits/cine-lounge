@@ -140,3 +140,28 @@ export async function logWatchEvent(
 export async function fetchContinueWatching(profileId: string): Promise<DbWatchHistory[]> {
   return api(`/api/profiles/${profileId}/continue-watching`);
 }
+
+// ── AI Enrichment ──
+
+export interface AiEnrichmentData {
+  logline: string;
+  shortSummary: string;
+  themes: string[];
+  moodTags: string[];
+  contentWarnings: string[];
+  recommendedAudience: string;
+  similarTitles: { title: string; reason: string }[];
+  discussionQuestions: string[];
+  watchAdvice: { pace: string; bestTime: string; withWho: string };
+  confidence: number;
+}
+
+export interface AiDetails {
+  generatedAt: string;
+  model: string;
+  data: AiEnrichmentData;
+}
+
+export async function enrichFilmWithAI(filmId: string): Promise<{ success: boolean; aiDetails: AiDetails }> {
+  return api(`/api/films/${filmId}/ai/enrich`, { method: "POST" });
+}

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -5,6 +6,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import profileRoutes from "./routes/profiles.js";
 import interactionRoutes from "./routes/interactions.js";
+import aiRoutes from "./routes/ai.js";
 import { read, getDbPath } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +25,7 @@ app.use("/storage/films", express.static(STORAGE_DIR, { acceptRanges: true }));
 // ── API Routes ──
 app.use("/api/profiles", profileRoutes);
 app.use("/api/profiles", interactionRoutes);
+app.use("/api/films", aiRoutes);
 
 // ── Export DB ──
 app.get("/api/export", (req, res) => {
