@@ -2,14 +2,23 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { getFilmById, formatDuration } from "@/data/mockFilms";
 import { useProfile } from "@/contexts/ProfileContext";
+import {
+  getWatchProgress,
+  updateWatchProgress,
+  logWatchEvent,
+  fetchRating,
+} from "@/lib/api";
 import { ArrowLeft, Play, Pause, Volume2, VolumeX, Maximize, Minimize } from "lucide-react";
 import { motion } from "framer-motion";
+import SurveyModal from "@/components/SurveyModal";
+
+const SURVEY_THRESHOLD = 0.15; // show survey after watching 15%
 
 export default function FilmPlayer() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const film = getFilmById(id || "");
-  const { getPlaybackTime, setPlaybackTime } = useProfile();
+  const { activeProfile } = useProfile();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -18,32 +27,83 @@ export default function FilmPlayer() {
   const [muted, setMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [showSurvey, setShowSurvey] = useState(false);
+  const [surveyAnswered, setSurveyAnswered] = useState(false);
   const hideTimeout = useRef<number>();
+  const lastSavedTime = useRef(0);
+  const watchStartTime = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!film) { navigate("/home"); return; }
-    const saved = getPlaybackTime(film.id);
-    if (videoRef.current && saved > 0) {
-      videoRef.current.currentTime = saved;
-    }
-  }, [film]);
+    if (!film || !activeProfile) { navigate("/home"); return; }
+    // Load saved position
+    getWatchProgress(activeProfile.id, film.id).then(prog => {
+      if (prog && videoRef.current) {
+        videoRef.current.currentTime = prog.last_position_sec;
+        setCurrentTime(prog.last_position_sec);
+      }
+    });
+    // Check if survey already answered
+    fetchRating(activeProfile.id, film.id).then(r => {
+      if (r && r.liked !== null) setSurveyAnswered(true);
+    });
+  }, [film, activeProfile]);
 
-  const saveTime = useCallback(() => {
-    if (film && videoRef.current) {
-      setPlaybackTime(film.id, videoRef.current.currentTime);
-    }
-  }, [film, setPlaybackTime]);
+  const saveProgress = useCallback(async () => {
+    if (!film || !activeProfile || !videoRef.current) return;
+    const pos = videoRef.current.currentTime;
+    const delta = pos - lastSavedTime.current;
+    if (Math.abs(delta) < 1) return;
+    const actualDelta = Math.max(0, delta);
+    lastSavedTime.current = pos;
+    await updateWatchProgress(
+      activeProfile.id,
+      film.id,
+      pos,
+      actualDelta,
+      videoRef.current.duration || film.duration
+    ).catch(console.error);
+  }, [film, activeProfile]);
 
+  // Auto-save every 10s
   useEffect(() => {
-    const interval = setInterval(saveTime, 5000);
-    return () => { clearInterval(interval); saveTime(); };
-  }, [saveTime]);
+    const interval = setInterval(saveProgress, 10000);
+    return () => { clearInterval(interval); saveProgress(); };
+  }, [saveProgress]);
 
   const togglePlay = () => {
     const v = videoRef.current;
-    if (!v) return;
-    if (v.paused) { v.play(); setPlaying(true); }
-    else { v.pause(); setPlaying(false); }
+    if (!v || !film || !activeProfile) return;
+    if (v.paused) {
+      v.play(); setPlaying(true);
+      watchStartTime.current = v.currentTime;
+      logWatchEvent(activeProfile.id, film.id, "PLAY", v.currentTime).catch(console.error);
+    } else {
+      v.pause(); setPlaying(false);
+      logWatchEvent(activeProfile.id, film.id, "PAUSE", v.currentTime).catch(console.error);
+    }
+  };
+
+  const handleEnded = async () => {
+    setPlaying(false);
+    if (!film || !activeProfile) return;
+    await logWatchEvent(activeProfile.id, film.id, "ENDED", videoRef.current?.duration || 0).catch(console.error);
+    await saveProgress();
+    // Show survey
+    if (!surveyAnswered) setShowSurvey(true);
+  };
+
+  const handleExit = async () => {
+    if (film && activeProfile && videoRef.current) {
+      await logWatchEvent(activeProfile.id, film.id, "STOP", videoRef.current.currentTime).catch(console.error);
+      await saveProgress();
+      // Show survey if watched enough
+      const watchedPct = duration > 0 ? currentTime / duration : 0;
+      if (!surveyAnswered && watchedPct >= SURVEY_THRESHOLD) {
+        setShowSurvey(true);
+        return;
+      }
+    }
+    navigate(-1);
   };
 
   const toggleFullscreen = () => {
@@ -62,6 +122,7 @@ export default function FilmPlayer() {
     if (!v) return;
     v.currentTime = Number(e.target.value);
     setCurrentTime(v.currentTime);
+    lastSavedTime.current = v.currentTime;
   };
 
   const handleMouseMove = () => {
@@ -81,84 +142,94 @@ export default function FilmPlayer() {
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="relative flex h-screen w-full items-center justify-center bg-black"
-      onMouseMove={handleMouseMove}
-      onClick={togglePlay}
-    >
-      <video
-        ref={videoRef}
-        src={film.videoUrl}
-        className="h-full w-full object-contain"
-        muted={muted}
-        onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime || 0)}
-        onLoadedMetadata={() => setDuration(videoRef.current?.duration || 0)}
-        onEnded={() => setPlaying(false)}
-      />
-
-      {/* Controls overlay */}
-      <motion.div
-        className="absolute inset-0 flex flex-col justify-between"
-        animate={{ opacity: showControls ? 1 : 0 }}
-        transition={{ duration: 0.3 }}
-        style={{ pointerEvents: showControls ? "auto" : "none" }}
-        onClick={(e) => e.stopPropagation()}
+    <>
+      <div
+        ref={containerRef}
+        className="relative flex h-screen w-full items-center justify-center bg-black"
+        onMouseMove={handleMouseMove}
+        onClick={togglePlay}
       >
-        {/* Top bar */}
-        <div className="flex items-center gap-4 bg-gradient-to-b from-black/60 to-transparent px-4 py-4 md:px-8">
-          <button onClick={() => { saveTime(); navigate(-1); }} className="text-foreground hover:text-primary">
-            <ArrowLeft size={24} />
-          </button>
-          <h2 className="text-lg font-medium text-foreground">{film.title}</h2>
-        </div>
+        <video
+          ref={videoRef}
+          src={film.videoUrl}
+          className="h-full w-full object-contain"
+          muted={muted}
+          onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime || 0)}
+          onLoadedMetadata={() => setDuration(videoRef.current?.duration || 0)}
+          onEnded={handleEnded}
+        />
 
-        {/* Center play button */}
-        {!playing && (
-          <div className="flex items-center justify-center">
-            <button
-              onClick={togglePlay}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground/20 backdrop-blur transition hover:bg-foreground/30"
-            >
-              <Play size={32} className="text-foreground" fill="currentColor" />
+        <motion.div
+          className="absolute inset-0 flex flex-col justify-between"
+          animate={{ opacity: showControls ? 1 : 0 }}
+          transition={{ duration: 0.3 }}
+          style={{ pointerEvents: showControls ? "auto" : "none" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-4 bg-gradient-to-b from-black/60 to-transparent px-4 py-4 md:px-8">
+            <button onClick={handleExit} className="text-foreground hover:text-primary">
+              <ArrowLeft size={24} />
             </button>
-          </div>
-        )}
-
-        {/* Bottom controls */}
-        <div className="bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-8 md:px-8">
-          {/* Progress bar */}
-          <div className="group relative mb-3 h-1 w-full cursor-pointer rounded bg-muted">
-            <div className="h-full rounded bg-primary" style={{ width: `${progress}%` }} />
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              step={0.1}
-              value={currentTime}
-              onChange={handleSeek}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
+            <h2 className="text-lg font-medium text-foreground">{film.title}</h2>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button onClick={togglePlay} className="text-foreground">
-                {playing ? <Pause size={22} /> : <Play size={22} fill="currentColor" />}
+          {!playing && (
+            <div className="flex items-center justify-center">
+              <button
+                onClick={togglePlay}
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground/20 backdrop-blur transition hover:bg-foreground/30"
+              >
+                <Play size={32} className="text-foreground" fill="currentColor" />
               </button>
-              <button onClick={() => setMuted(!muted)} className="text-foreground">
-                {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-              </button>
-              <span className="text-xs text-muted-foreground">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
             </div>
-            <button onClick={toggleFullscreen} className="text-foreground">
-              {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
-            </button>
+          )}
+
+          <div className="bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-8 md:px-8">
+            <div className="group relative mb-3 h-1 w-full cursor-pointer rounded bg-muted">
+              <div className="h-full rounded bg-primary" style={{ width: `${progress}%` }} />
+              <input
+                type="range"
+                min={0}
+                max={duration || 0}
+                step={0.1}
+                value={currentTime}
+                onChange={handleSeek}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button onClick={togglePlay} className="text-foreground">
+                  {playing ? <Pause size={22} /> : <Play size={22} fill="currentColor" />}
+                </button>
+                <button onClick={() => setMuted(!muted)} className="text-foreground">
+                  {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                </button>
+                <span className="text-xs text-muted-foreground">
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </span>
+              </div>
+              <button onClick={toggleFullscreen} className="text-foreground">
+                {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+              </button>
+            </div>
           </div>
-        </div>
-      </motion.div>
-    </div>
+        </motion.div>
+      </div>
+
+      {showSurvey && activeProfile && (
+        <SurveyModal
+          profileId={activeProfile.id}
+          filmId={film.id}
+          filmTitle={film.title}
+          onClose={() => {
+            setShowSurvey(false);
+            setSurveyAnswered(true);
+            navigate(-1);
+          }}
+        />
+      )}
+    </>
   );
 }
