@@ -3,6 +3,7 @@ import { read, update } from "./db.js";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { scanForNewFilms } from "./watcher.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STORAGE_DIR = path.join(__dirname, "storage", "films");
@@ -16,6 +17,8 @@ function printHelp() {
 
   Commands:
     list                   List all films
+    scan                   Scan storage for new films & register them
+    scan --enrich          Scan + run AI enrichment on new films
     remove <id>            Remove a film by ID
     remove-all             Remove ALL films
     info <id>              Show details for a film
@@ -23,6 +26,8 @@ function printHelp() {
 
   Examples:
     node cli.js list
+    node cli.js scan
+    node cli.js scan --enrich
     node cli.js remove abc-123
     node cli.js remove-all
   `);
@@ -124,6 +129,12 @@ switch (command) {
   case "ls":
     listFilms();
     break;
+  case "scan": {
+    const enrich = args.includes("--enrich");
+    console.log(`\n  🔍 Scanning for new films...${enrich ? " (with AI enrichment)" : ""}\n`);
+    await scanForNewFilms({ enrich });
+    break;
+  }
   case "remove":
   case "rm":
   case "delete":
