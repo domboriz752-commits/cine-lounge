@@ -10,6 +10,36 @@ const STORAGE_DIR = path.join(__dirname, "..", "storage", "films");
 
 const router = Router();
 
+const CANONICAL_GENRES = [
+  "Action", "Adventure", "Animation", "Biography", "Comedy", "Crime",
+  "Documentary", "Drama", "Family", "Fantasy", "Film-Noir", "History",
+  "Horror", "Music", "Musical", "Mystery", "Romance", "Sci-Fi",
+  "Sport", "Thriller", "War", "Western",
+];
+
+const GENRE_ALIASES = {
+  "science fiction": "Sci-Fi", "sci fi": "Sci-Fi", "scifi": "Sci-Fi",
+  "noir": "Film-Noir", "film noir": "Film-Noir",
+  "biographical": "Biography", "biopic": "Biography",
+  "suspense": "Thriller", "animated": "Animation",
+  "romantic": "Romance", "love": "Romance",
+  "scary": "Horror", "sports": "Sport",
+  "historical": "History", "comedic": "Comedy",
+  "action-adventure": "Action", "docu": "Documentary",
+};
+
+function normalizeGenres(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const r of raw) {
+    const lower = (r || "").toLowerCase().trim();
+    const mapped = GENRE_ALIASES[lower] || CANONICAL_GENRES.find(g => g.toLowerCase() === lower);
+    if (mapped && !seen.has(mapped)) { seen.add(mapped); result.push(mapped); }
+  }
+  return result;
+}
+
 function filenameToTitle(name = "") {
   const base = name.replace(/\.[^.]+$/, "");
   return base
@@ -186,7 +216,7 @@ Return JSON in this exact format:
 
       if (typeof parsed.year === "number" && parsed.year > 0) f.year = parsed.year;
       if (typeof parsed.description === "string") f.description = parsed.description;
-      if (Array.isArray(parsed.genres)) f.genres = parsed.genres;
+      if (Array.isArray(parsed.genres)) f.genres = normalizeGenres(parsed.genres);
       if (typeof parsed.certification === "string") f.certification = parsed.certification;
 
       // Use local poster path if downloaded, otherwise keep remote URL

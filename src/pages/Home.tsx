@@ -5,7 +5,7 @@ import ContentRow from "@/components/ContentRow";
 import ContinueWatchingRow from "@/components/ContinueWatchingRow";
 import { useProfile } from "@/contexts/ProfileContext";
 import { fetchContinueWatching, fetchFilms, type DbWatchHistory } from "@/lib/api";
-import { type Film } from "@/data/mockFilms";
+import { type Film, GENRES } from "@/data/mockFilms";
 import { motion } from "framer-motion";
 import { Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -40,9 +40,8 @@ export default function Home() {
     );
     if (recent.length) cats.push({ title: "Recently Added", films: recent.slice(0, 10) });
 
-    const genres = new Set<string>();
-    films.forEach(f => f.genres?.forEach(g => genres.add(g)));
-    for (const genre of genres) {
+    // Use canonical genre list — only show genres that have films
+    for (const genre of GENRES) {
       const genreFilms = films.filter(f => f.genres?.includes(genre));
       if (genreFilms.length >= 1) cats.push({ title: genre, films: genreFilms });
     }
