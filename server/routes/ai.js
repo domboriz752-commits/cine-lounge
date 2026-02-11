@@ -18,9 +18,19 @@ function filenameToTitle(name = "") {
     .trim();
 }
 
+const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff"];
+
+function findExistingImage(dir) {
+  try {
+    const files = fs.readdirSync(dir);
+    const img = files.find(f => IMAGE_EXTS.includes(path.extname(f).toLowerCase()));
+    return img ? `/storage/films/${path.basename(dir)}/${img}` : null;
+  } catch { return null; }
+}
+
 async function downloadPoster(url, filmDir) {
   try {
-    if (!url || !url.startsWith("http")) return null;
+    if (!url || !url.startsWith("http")) throw new Error("No valid URL");
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const contentType = response.headers.get("content-type") || "";
@@ -33,7 +43,12 @@ async function downloadPoster(url, filmDir) {
     console.log(`  🖼️  Poster saved: ${posterPath}`);
     return `/storage/films/${path.basename(filmDir)}/poster${ext}`;
   } catch (err) {
-    console.warn(`  ⚠️  Poster download failed: ${err.message}, using fallback image`);
+    console.warn(`  ⚠️  Poster download failed: ${err.message}`);
+    const existing = findExistingImage(filmDir);
+    if (existing) {
+      console.log(`  🖼️  Using existing image in folder: ${existing}`);
+      return existing;
+    }
     try {
       const fallback = path.join(__dirname, "..", "utils", "Image_unavailable.png");
       const destPath = path.join(filmDir, "poster.png");
