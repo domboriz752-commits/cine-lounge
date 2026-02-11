@@ -9,6 +9,7 @@ import interactionRoutes from "./routes/interactions.js";
 import aiRoutes from "./routes/ai.js";
 import filmRoutes from "./routes/films.js";
 import { read, getDbPath } from "./db.js";
+import { checkGemini } from "./utils/gemini.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -60,8 +61,9 @@ if (fs.existsSync(distDir)) {
   });
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`\n  🎬 Vetro server running at http://localhost:${PORT}`);
   console.log(`  📁 Database: ${getDbPath()}`);
   console.log(`  🎞️  Film storage: ${STORAGE_DIR}\n`);
+  await checkGemini();
 });
