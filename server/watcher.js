@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { v4 as uuid } from "uuid";
 import { read, update } from "./db.js";
-import model from "./utils/gemini.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STORAGE_DIR = path.join(__dirname, "storage", "films");
@@ -27,36 +27,47 @@ function parseFilenameTitle(fileName) {
 
 function findFileByExt(dir, exts) {
   try {
-    const files = fs.readdirSync(dir);
-    return files.find(f => exts.includes(path.extname(f).toLowerCase())) || null;
+    return fs.readdirSync(dir).find(f => exts.includes(path.extname(f).toLowerCase())) || null;
   } catch { return null; }
 }
 
-// Scan storage dir for folders not yet in DB and register them
-export async function scanForNewFilms() {
-  if (!fs.existsSync(STORAGE_DIR)) return;
+// Scan storage dir for new films — handles both:
+// 1. Loose video files dropped directly into storage/films/
+// 2. Subfolders that contain video files but aren't in the DB
+export async function scanForNewFilms({ enrich = false } = {}) {
+  if (!fs.existsSync(STORAGE_DIR)) {
+    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+    console.log("  📁 Created storage directory");
+    return [];
+  }
 
   const db = read();
   const knownIds = new Set((db.films || []).map(f => f.id));
-  const folders = fs.readdirSync(STORAGE_DIR, { withFileTypes: true })
-    .filter(d => d.isDirectory())
-    .map(d => d.name);
+  // Also track known storage paths to avoid re-adding moved files
+  const knownPaths = new Set((db.films || []).map(f => f.storagePath).filter(Boolean));
 
+  const entries = fs.readdirSync(STORAGE_DIR, { withFileTypes: true });
   const newFilms = [];
 
-  for (const folderId of folders) {
-    if (knownIds.has(folderId)) continue;
+  // 1) Loose video files — create a folder and move them in
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const ext = path.extname(entry.name).toLowerCase();
+    if (!VIDEO_EXTS.includes(ext)) continue;
 
-    const folderPath = path.join(STORAGE_DIR, folderId);
-    const videoFile = findFileByExt(folderPath, VIDEO_EXTS);
-    if (!videoFile) continue; // No video file, skip
+    const filmId = uuid();
+    const filmDir = path.join(STORAGE_DIR, filmId);
+    fs.mkdirSync(filmDir, { recursive: true });
 
-    const videoExt = path.extname(videoFile).toLowerCase();
-    const { title, year } = parseFilenameTitle(videoFile);
-    const imageFile = findFileByExt(folderPath, IMAGE_EXTS);
+    const src = path.join(STORAGE_DIR, entry.name);
+    const dest = path.join(filmDir, entry.name);
+    fs.renameSync(src, dest);
+
+    const { title, year } = parseFilenameTitle(entry.name);
+    const stat = fs.statSync(dest);
 
     const film = {
-      id: folderId,
+      id: filmId,
       officialTitle: title,
       displayTitle: title,
       year,
@@ -66,27 +77,66 @@ export async function scanForNewFilms() {
       runtimeSec: 0,
       width: 0,
       height: 0,
-      storagePath: `/storage/films/${folderId}/${videoFile}`,
-      posterUrl: imageFile ? `/storage/films/${folderId}/${imageFile}` : "",
-      posterPath: imageFile ? `/storage/films/${folderId}/${imageFile}` : "",
-      fileName: videoFile,
-      fileSize: 0,
+      storagePath: `/storage/films/${filmId}/${entry.name}`,
+      posterUrl: "",
+      posterPath: "",
+      fileName: entry.name,
+      fileSize: stat.size,
       uploadedAt: new Date().toISOString(),
       aiDetails: null,
     };
 
-    try {
-      const stat = fs.statSync(path.join(folderPath, videoFile));
-      film.fileSize = stat.size;
-    } catch {}
-
     newFilms.push(film);
-    console.log(`  📂 Detected new film: "${title}" (${folderId})`);
+    console.log(`  📂 Loose file → folder: "${title}" (${filmId})`);
   }
 
-  if (newFilms.length === 0) return;
+  // 2) Subfolders with video files not yet in DB
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (knownIds.has(entry.name)) continue;
 
-  // Save all new films to DB
+    const folderPath = path.join(STORAGE_DIR, entry.name);
+    const videoFile = findFileByExt(folderPath, VIDEO_EXTS);
+    if (!videoFile) continue;
+
+    const storagePath = `/storage/films/${entry.name}/${videoFile}`;
+    if (knownPaths.has(storagePath)) continue;
+
+    const { title, year } = parseFilenameTitle(videoFile);
+    const imageFile = findFileByExt(folderPath, IMAGE_EXTS);
+    let fileSize = 0;
+    try { fileSize = fs.statSync(path.join(folderPath, videoFile)).size; } catch {}
+
+    const film = {
+      id: entry.name,
+      officialTitle: title,
+      displayTitle: title,
+      year,
+      description: "",
+      genres: [],
+      certification: "",
+      runtimeSec: 0,
+      width: 0,
+      height: 0,
+      storagePath,
+      posterUrl: imageFile ? `/storage/films/${entry.name}/${imageFile}` : "",
+      posterPath: imageFile ? `/storage/films/${entry.name}/${imageFile}` : "",
+      fileName: videoFile,
+      fileSize,
+      uploadedAt: new Date().toISOString(),
+      aiDetails: null,
+    };
+
+    newFilms.push(film);
+    console.log(`  📂 Detected folder: "${title}" (${entry.name})`);
+  }
+
+  if (newFilms.length === 0) {
+    console.log("  ✅ No new films found");
+    return [];
+  }
+
+  // Save to DB
   await update((db) => {
     if (!db.films) db.films = [];
     db.films.push(...newFilms);
@@ -94,49 +144,28 @@ export async function scanForNewFilms() {
 
   console.log(`  ✅ Registered ${newFilms.length} new film(s)`);
 
-  // Trigger AI enrichment for each (non-blocking)
-  for (const film of newFilms) {
-    triggerEnrichment(film.id).catch(err =>
-      console.warn(`  ⚠️  Auto-enrichment failed for ${film.id}: ${err.message}`)
-    );
+  // Trigger AI enrichment if requested
+  if (enrich) {
+    for (const film of newFilms) {
+      await triggerEnrichment(film.id);
+    }
   }
+
+  return newFilms;
 }
 
 async function triggerEnrichment(filmId) {
-  if (!model) {
-    console.log(`  ⏭️  Skipping AI enrichment for ${filmId} (no Gemini key)`);
-    return;
-  }
-
-  // Call our own enrichment endpoint internally
   const port = process.env.PORT || 3001;
   try {
+    console.log(`  🤖 Enriching ${filmId}...`);
     const res = await fetch(`http://localhost:${port}/api/films/${filmId}/ai/enrich`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    console.log(`  🤖 AI enrichment complete for "${data.film?.displayTitle || filmId}"`);
+    console.log(`  ✅ Enriched: "${data.film?.displayTitle || filmId}"`);
   } catch (err) {
-    console.warn(`  ⚠️  AI enrichment request failed for ${filmId}: ${err.message}`);
+    console.warn(`  ⚠️  Enrichment failed for ${filmId}: ${err.message}`);
   }
-}
-
-// Watch for new folders being added
-export function startWatcher() {
-  if (!fs.existsSync(STORAGE_DIR)) fs.mkdirSync(STORAGE_DIR, { recursive: true });
-
-  console.log(`  👀 Watching for new films in ${STORAGE_DIR}`);
-
-  // Initial scan on startup
-  setTimeout(() => scanForNewFilms(), 2000);
-
-  // Watch for changes
-  let debounceTimer = null;
-  fs.watch(STORAGE_DIR, { recursive: false }, (eventType, filename) => {
-    // Debounce — files may be copied slowly
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => scanForNewFilms(), 5000);
-  });
 }
