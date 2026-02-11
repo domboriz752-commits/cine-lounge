@@ -29,22 +29,24 @@ router.post("/:id/ai/enrich", async (req, res) => {
     const derivedTitle = filenameToTitle(film.fileName || film.displayTitle || film.officialTitle || "Untitled");
 
     const prompt = `
-You are generating metadata for a locally uploaded video file.
+You are a film metadata expert. Given a filename, identify the movie and return accurate metadata.
 
-Rules:
-- Do NOT claim you watched the film.
-- You are allowed to infer likely metadata from the filename.
-- Do NOT invent official age ratings. If unknown, return "Unrated".
-- Output STRICT JSON only. No markdown. No explanations. No code fences.
-- Keep title exactly as provided.
-- posterUrl must be a direct, publicly accessible image URL (ideally TMDB w500). If unsure, return "".
+RULES:
+- Output STRICT JSON only. No markdown, no code fences, no explanations.
+- "title" must be the CLEAN, official English title of the movie (no year, no resolution, no file extensions, no dots/underscores). Example: filename "The.Dark.Knight.2008.1080p.mkv" → title "The Dark Knight".
+- "year" must be the actual release year of the identified movie. If unknown, use 0.
+- "posterUrl" must be a WORKING image URL. Use the TMDB image CDN format: https://image.tmdb.org/t/p/w500/<poster_path>. If you know the movie's TMDB poster path, include it. If unsure, return "".
+- "description" should be a real 1-2 sentence synopsis of the movie.
+- "genres" should be the real genres of the movie.
+- "certification" should be the MPAA rating (G, PG, PG-13, R, NC-17) or "Unrated" if unknown.
+- Do NOT invent data. If you're not confident about a field, leave it empty/default.
 
-Title (from filename): ${derivedTitle}
-Original filename: ${film.fileName || ""}
+Filename: ${film.fileName || ""}
+Cleaned title guess: ${derivedTitle}
 
 Return JSON in this exact format:
 {
-  "title": "${derivedTitle}",
+  "title": "",
   "year": 0,
   "description": "",
   "genres": [],
@@ -86,8 +88,10 @@ Return JSON in this exact format:
       const f = db2.films?.find((x) => x.id === filmId);
       if (!f) return;
 
-      f.officialTitle = derivedTitle;
-      f.displayTitle = derivedTitle;
+      // Use AI-cleaned title if available, fallback to derived
+      const cleanTitle = (typeof parsed.title === "string" && parsed.title.trim()) ? parsed.title.trim() : derivedTitle;
+      f.officialTitle = cleanTitle;
+      f.displayTitle = cleanTitle;
 
       if (typeof parsed.year === "number" && parsed.year > 0) f.year = parsed.year;
       if (typeof parsed.description === "string") f.description = parsed.description;
