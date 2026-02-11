@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { read, update } from "../db.js";
-import openai from "../utils/openai.js";
+import model from "../utils/gemini.js";
 
 const router = Router();
 
@@ -13,8 +13,8 @@ function filenameToTitle(name = "") {
 }
 
 router.post("/:id/ai/enrich", async (req, res) => {
-  if (!openai) {
-    return res.status(503).json({ error: "OPENAI_API_KEY not configured" });
+  if (!model) {
+    return res.status(503).json({ error: "GEMINI_API_KEY not configured" });
   }
 
   try {
@@ -26,7 +26,6 @@ router.post("/:id/ai/enrich", async (req, res) => {
       return res.status(404).json({ error: "Film not found" });
     }
 
-    // Title is ALWAYS derived from the filename (user doesn't input anything)
     const derivedTitle = filenameToTitle(film.fileName || film.displayTitle || film.officialTitle || "Untitled");
 
     const prompt = `
@@ -36,7 +35,7 @@ Rules:
 - Do NOT claim you watched the film.
 - You are allowed to infer likely metadata from the filename.
 - Do NOT invent official age ratings. If unknown, return "Unrated".
-- Output STRICT JSON only. No markdown. No explanations.
+- Output STRICT JSON only. No markdown. No explanations. No code fences.
 - Keep title exactly as provided.
 - posterUrl must be a direct, publicly accessible image URL (ideally TMDB w500). If unsure, return "".
 
@@ -51,7 +50,6 @@ Return JSON in this exact format:
   "genres": [],
   "certification": "Unrated",
   "posterUrl": "",
-
   "logline": "",
   "shortSummary": "",
   "themes": [],
@@ -65,13 +63,10 @@ Return JSON in this exact format:
 }
 `;
 
-    const response = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: prompt,
-      temperature: 0.4,
-    });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const rawText = response.text();
 
-    const rawText = response.output_text;
     let parsed;
     try {
       const cleaned = rawText
@@ -80,8 +75,8 @@ Return JSON in this exact format:
         .trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      console.error("AI returned invalid JSON:", rawText);
-      return res.status(500).json({ error: "AI returned invalid JSON", raw: rawText });
+      console.error("Gemini returned invalid JSON:", rawText);
+      return res.status(500).json({ error: "Gemini returned invalid JSON", raw: rawText });
     }
 
     const generatedAt = new Date().toISOString();
@@ -90,11 +85,9 @@ Return JSON in this exact format:
       const f = db2.films?.find((x) => x.id === filmId);
       if (!f) return;
 
-      // Force title from filename
       f.officialTitle = derivedTitle;
       f.displayTitle = derivedTitle;
 
-      // AI-generated metadata
       if (typeof parsed.year === "number" && parsed.year > 0) f.year = parsed.year;
       if (typeof parsed.description === "string") f.description = parsed.description;
       if (Array.isArray(parsed.genres)) f.genres = parsed.genres;
@@ -103,7 +96,7 @@ Return JSON in this exact format:
 
       f.aiDetails = {
         generatedAt,
-        model: "gpt-4.1-mini",
+        model: "gemini-1.5-flash",
         data: parsed,
       };
     });
@@ -112,7 +105,7 @@ Return JSON in this exact format:
       success: true,
       aiDetails: {
         generatedAt,
-        model: "gpt-4.1-mini",
+        model: "gemini-1.5-flash",
         data: parsed,
       },
     });
