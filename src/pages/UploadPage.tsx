@@ -17,6 +17,7 @@ export default function UploadPage() {
   const [mode, setMode] = useState<UploadMode>("file");
   const [state, setState] = useState<UploadState>("idle");
   const [dragOver, setDragOver] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(true);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
@@ -64,16 +65,20 @@ export default function UploadPage() {
         filmId = result.film.id;
       }
 
-      toast.success("Film uploaded! AI is now analyzing...");
       setUploadedFilmId(filmId);
 
-      setState("enriching");
-      try {
-        await enrichFilmWithAI(filmId);
-        toast.success("AI enrichment complete — title, genres, poster & more generated!");
-      } catch (err) {
-        console.error("AI enrichment failed:", err);
-        toast.error("AI enrichment failed — you can retry later");
+      if (aiEnabled) {
+        toast.success("Film uploaded! AI is now analyzing...");
+        setState("enriching");
+        try {
+          await enrichFilmWithAI(filmId);
+          toast.success("AI enrichment complete — title, genres, poster & more generated!");
+        } catch (err) {
+          console.error("AI enrichment failed:", err);
+          toast.error("AI enrichment failed — you can retry later");
+        }
+      } else {
+        toast.success("Film uploaded successfully!");
       }
 
       setState("done");
@@ -211,6 +216,20 @@ export default function UploadPage() {
                   </p>
                 </div>
               )}
+
+              {/* AI toggle */}
+              <label className="mb-4 flex cursor-pointer items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={aiEnabled}
+                  onChange={(e) => setAiEnabled(e.target.checked)}
+                  className="h-4 w-4 accent-primary"
+                />
+                <span className="flex items-center gap-1.5 text-sm text-foreground">
+                  <Sparkles size={14} className="text-primary" />
+                  AI Enrichment — auto-detect title, genres, poster & more
+                </span>
+              </label>
 
               {/* Upload button */}
               <button
