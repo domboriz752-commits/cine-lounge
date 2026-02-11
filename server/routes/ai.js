@@ -97,9 +97,27 @@ Return JSON in this exact format:
 }
 `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const rawText = response.text();
+    // Retry logic for transient errors (503, rate limits, etc.)
+    let rawText;
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 5000;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        rawText = response.text();
+        break;
+      } catch (retryErr) {
+        const status = retryErr.status || retryErr.httpStatusCode || 0;
+        const isRetryable = status === 503 || status === 429 || status === 500;
+        if (isRetryable && attempt < MAX_RETRIES) {
+          console.warn(`⚠️  Gemini attempt ${attempt}/${MAX_RETRIES} failed (${status}), retrying in ${RETRY_DELAY_MS / 1000}s...`);
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        } else {
+          throw retryErr;
+        }
+      }
+    }
     console.log("🤖 Gemini raw response:\n", rawText);
 
     let parsed;

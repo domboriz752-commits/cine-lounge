@@ -9,11 +9,13 @@ import {
   logWatchEvent,
   fetchRating,
 } from "@/lib/api";
-import { ArrowLeft, Play, Pause, Volume2, VolumeX, Maximize, Minimize } from "lucide-react";
-import { motion } from "framer-motion";
+import { ArrowLeft, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Check } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import SurveyModal from "@/components/SurveyModal";
 
 const SURVEY_THRESHOLD = 0.15;
+
+const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export default function FilmPlayer() {
   const { id } = useParams<{ id: string }>();
@@ -30,8 +32,15 @@ export default function FilmPlayer() {
   const [showControls, setShowControls] = useState(true);
   const [showSurvey, setShowSurvey] = useState(false);
   const [surveyAnswered, setSurveyAnswered] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"main" | "speed">("main");
   const hideTimeout = useRef<number>();
   const lastSavedTime = useRef(0);
+
+  // Check if film has subtitles
+  const hasSubtitles = !!(film && (film as any).subtitlePath);
 
   useEffect(() => {
     if (!id) { navigate("/home"); return; }
@@ -68,6 +77,11 @@ export default function FilmPlayer() {
     const interval = setInterval(saveProgress, 10000);
     return () => { clearInterval(interval); saveProgress(); };
   }, [saveProgress]);
+
+  // Apply playback speed
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = playbackSpeed;
+  }, [playbackSpeed]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -125,11 +139,16 @@ export default function FilmPlayer() {
     hideTimeout.current = window.setTimeout(() => { if (playing) setShowControls(false); }, 3000);
   };
 
+  const toggleSettings = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowSettings(!showSettings);
+    setSettingsTab("main");
+  };
+
   if (!film) return <div className="flex h-screen items-center justify-center bg-black text-foreground">Loading...</div>;
 
   const title = filmTitle(film);
   const videoSrc = filmVideoUrl(film);
-  const filmDuration = film.runtimeSec || film.duration || 0;
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -143,7 +162,10 @@ export default function FilmPlayer() {
         ref={containerRef}
         className="relative flex h-screen w-full items-center justify-center bg-black"
         onMouseMove={handleMouseMove}
-        onClick={togglePlay}
+        onClick={(e) => {
+          if (showSettings) { setShowSettings(false); return; }
+          togglePlay();
+        }}
       >
         <video
           ref={videoRef}
@@ -161,12 +183,15 @@ export default function FilmPlayer() {
           style={{ pointerEvents: showControls ? "auto" : "none" }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Top bar */}
           <div className="flex items-center gap-4 bg-gradient-to-b from-black/60 to-transparent px-4 py-4 md:px-8">
             <button onClick={handleExit} className="text-foreground hover:text-primary">
               <ArrowLeft size={24} />
             </button>
             <h2 className="text-lg font-medium text-foreground">{title}</h2>
           </div>
+
+          {/* Center play button */}
           {!playing && (
             <div className="flex items-center justify-center">
               <button
@@ -177,6 +202,8 @@ export default function FilmPlayer() {
               </button>
             </div>
           )}
+
+          {/* Bottom controls */}
           <div className="bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-8 md:px-8">
             <div className="group relative mb-3 h-1 w-full cursor-pointer rounded bg-muted">
               <div className="h-full rounded bg-primary" style={{ width: `${progress}%` }} />
@@ -198,9 +225,82 @@ export default function FilmPlayer() {
                   {formatTime(currentTime)} / {formatTime(duration)}
                 </span>
               </div>
-              <button onClick={toggleFullscreen} className="text-foreground">
-                {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Settings button */}
+                <div className="relative">
+                  <button onClick={toggleSettings} className="text-foreground hover:text-primary transition">
+                    <Settings size={20} />
+                  </button>
+                  <AnimatePresence>
+                    {showSettings && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute bottom-10 right-0 w-56 rounded-lg border border-border bg-card/95 backdrop-blur-lg shadow-xl overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {settingsTab === "main" && (
+                          <div className="py-1">
+                            {/* Speed */}
+                            <button
+                              onClick={() => setSettingsTab("speed")}
+                              className="flex w-full items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition"
+                            >
+                              <span>Playback speed</span>
+                              <span className="text-xs text-muted-foreground">{playbackSpeed === 1 ? "Normal" : `${playbackSpeed}x`}</span>
+                            </button>
+
+                            {/* Subtitles */}
+                            <button
+                              onClick={() => {
+                                if (hasSubtitles) setSubtitlesEnabled(!subtitlesEnabled);
+                              }}
+                              className={`flex w-full items-center justify-between px-4 py-2.5 text-sm transition ${
+                                hasSubtitles ? "text-foreground hover:bg-muted/50 cursor-pointer" : "text-muted-foreground/50 cursor-not-allowed"
+                              }`}
+                            >
+                              <span>Subtitles</span>
+                              <span className="text-xs">
+                                {hasSubtitles
+                                  ? subtitlesEnabled ? "On" : "Off"
+                                  : "Unavailable"
+                                }
+                              </span>
+                            </button>
+                          </div>
+                        )}
+
+                        {settingsTab === "speed" && (
+                          <div className="py-1">
+                            <button
+                              onClick={() => setSettingsTab("main")}
+                              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:bg-muted/50 border-b border-border transition"
+                            >
+                              <ArrowLeft size={14} />
+                              <span>Playback speed</span>
+                            </button>
+                            {SPEED_OPTIONS.map((speed) => (
+                              <button
+                                key={speed}
+                                onClick={() => { setPlaybackSpeed(speed); setSettingsTab("main"); }}
+                                className="flex w-full items-center justify-between px-4 py-2 text-sm text-foreground hover:bg-muted/50 transition"
+                              >
+                                <span>{speed === 1 ? "Normal" : `${speed}x`}</span>
+                                {playbackSpeed === speed && <Check size={14} className="text-primary" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <button onClick={toggleFullscreen} className="text-foreground">
+                  {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+                </button>
+              </div>
             </div>
           </div>
         </motion.div>
