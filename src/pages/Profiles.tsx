@@ -2,16 +2,17 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useProfile, PROFILE_COLORS, PROFILE_ICONS, Profile } from "@/contexts/ProfileContext";
 import { useNavigate } from "react-router-dom";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X, Loader2 } from "lucide-react";
 
 export default function Profiles() {
-  const { profiles, selectProfile, addProfile, deleteProfile } = useProfile();
+  const { profiles, selectProfile, addProfile, removeProfile, loading } = useProfile();
   const navigate = useNavigate();
   const [isManaging, setIsManaging] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(PROFILE_COLORS[0]);
   const [newIcon, setNewIcon] = useState(PROFILE_ICONS[0]);
+  const [saving, setSaving] = useState(false);
 
   const handleSelect = (profile: Profile) => {
     if (isManaging) return;
@@ -19,12 +20,35 @@ export default function Profiles() {
     navigate("/home");
   };
 
-  const handleAdd = () => {
-    if (!newName.trim()) return;
-    addProfile(newName.trim(), newColor, newIcon);
-    setNewName("");
-    setShowAdd(false);
+  const handleAdd = async () => {
+    if (!newName.trim() || saving) return;
+    setSaving(true);
+    try {
+      await addProfile(newName.trim(), newColor, newIcon);
+      setNewName("");
+      setShowAdd(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await removeProfile(id);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
@@ -56,7 +80,7 @@ export default function Profiles() {
               </div>
               {isManaging && profiles.length > 1 && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); deleteProfile(profile.id); }}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(profile.id); }}
                   className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
                 >
                   <Trash2 size={14} />
@@ -128,9 +152,10 @@ export default function Profiles() {
           </div>
           <button
             onClick={handleAdd}
-            className="w-full rounded bg-primary py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            disabled={saving || !newName.trim()}
+            className="w-full rounded bg-primary py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            Add
+            {saving ? "Adding..." : "Add"}
           </button>
         </motion.div>
       )}

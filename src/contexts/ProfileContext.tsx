@@ -1,4 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import {
+  fetchProfiles,
+  createProfile as apiCreateProfile,
+  deleteProfile as apiDeleteProfile,
+  activateProfile,
+  fetchMyList,
+  addToMyList,
+  removeFromMyList,
+  type DbProfile,
+} from "@/lib/api";
 
 export interface Profile {
   id: string;
@@ -10,15 +20,15 @@ export interface Profile {
 interface ProfileContextType {
   profiles: Profile[];
   activeProfile: Profile | null;
+  loading: boolean;
   selectProfile: (profile: Profile) => void;
-  addProfile: (name: string, color: string, icon: string) => void;
-  deleteProfile: (id: string) => void;
+  addProfile: (name: string, color: string, icon: string) => Promise<void>;
+  removeProfile: (id: string) => Promise<void>;
   logout: () => void;
   myList: string[];
   toggleMyList: (filmId: string) => void;
   isInMyList: (filmId: string) => boolean;
-  getPlaybackTime: (filmId: string) => number;
-  setPlaybackTime: (filmId: string, time: number) => void;
+  refreshMyList: () => Promise<void>;
 }
 
 const ProfileContext = createContext<ProfileContextType | null>(null);
@@ -26,93 +36,90 @@ const ProfileContext = createContext<ProfileContextType | null>(null);
 const PROFILE_COLORS = ["#e50914", "#0071eb", "#b4d455", "#e8b708", "#6d28d9", "#f97316"];
 const PROFILE_ICONS = ["👤", "🎬", "🍿", "🎭", "🌟", "🎯"];
 
-const STORAGE_KEYS = {
-  profiles: "stream_profiles",
-  active: "stream_active_profile",
-  myList: (id: string) => `stream_mylist_${id}`,
-  playback: (profileId: string) => `stream_playback_${profileId}`,
-};
-
-function loadJSON<T>(key: string, fallback: T): T {
-  try {
-    const val = localStorage.getItem(key);
-    return val ? JSON.parse(val) : fallback;
-  } catch {
-    return fallback;
-  }
+function dbToProfile(p: DbProfile): Profile {
+  return { id: p.id, name: p.name, color: p.avatar_color, icon: p.avatar_icon };
 }
 
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
-  const [profiles, setProfiles] = useState<Profile[]>(() =>
-    loadJSON(STORAGE_KEYS.profiles, [
-      { id: "1", name: "User 1", color: PROFILE_COLORS[0], icon: PROFILE_ICONS[0] },
-      { id: "2", name: "User 2", color: PROFILE_COLORS[1], icon: PROFILE_ICONS[1] },
-    ])
-  );
-
-  const [activeProfile, setActiveProfile] = useState<Profile | null>(() =>
-    loadJSON(STORAGE_KEYS.active, null)
-  );
-
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
   const [myList, setMyList] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  // Load profiles from DB
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.profiles, JSON.stringify(profiles));
-  }, [profiles]);
+    fetchProfiles()
+      .then(data => {
+        const mapped = data.map(dbToProfile);
+        setProfiles(mapped);
+        // Restore active profile from localStorage cache
+        const cachedId = localStorage.getItem("stream_active_profile_id");
+        if (cachedId) {
+          const found = mapped.find(p => p.id === cachedId);
+          if (found) setActiveProfile(found);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
-  useEffect(() => {
-    if (activeProfile) {
-      localStorage.setItem(STORAGE_KEYS.active, JSON.stringify(activeProfile));
-      setMyList(loadJSON(STORAGE_KEYS.myList(activeProfile.id), []));
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.active);
+  // Load my list when active profile changes
+  const refreshMyList = useCallback(async () => {
+    if (!activeProfile) { setMyList([]); return; }
+    try {
+      const list = await fetchMyList(activeProfile.id);
+      setMyList(list);
+    } catch (e) {
+      console.error(e);
     }
   }, [activeProfile]);
 
   useEffect(() => {
-    if (activeProfile) {
-      localStorage.setItem(STORAGE_KEYS.myList(activeProfile.id), JSON.stringify(myList));
-    }
-  }, [myList, activeProfile]);
+    refreshMyList();
+  }, [refreshMyList]);
 
-  const selectProfile = useCallback((profile: Profile) => setActiveProfile(profile), []);
-
-  const addProfile = useCallback((name: string, color: string, icon: string) => {
-    const newProfile: Profile = { id: Date.now().toString(), name, color, icon };
-    setProfiles(prev => [...prev, newProfile]);
+  const selectProfile = useCallback((profile: Profile) => {
+    setActiveProfile(profile);
+    localStorage.setItem("stream_active_profile_id", profile.id);
+    activateProfile(profile.id).catch(console.error);
   }, []);
 
-  const deleteProfile = useCallback((id: string) => {
+  const addProfile = useCallback(async (name: string, color: string, icon: string) => {
+    const created = await apiCreateProfile(name, color, icon);
+    setProfiles(prev => [...prev, dbToProfile(created)]);
+  }, []);
+
+  const removeProfile = useCallback(async (id: string) => {
+    await apiDeleteProfile(id);
     setProfiles(prev => prev.filter(p => p.id !== id));
     setActiveProfile(prev => (prev?.id === id ? null : prev));
+    if (localStorage.getItem("stream_active_profile_id") === id) {
+      localStorage.removeItem("stream_active_profile_id");
+    }
   }, []);
 
-  const logout = useCallback(() => setActiveProfile(null), []);
-
-  const toggleMyList = useCallback((filmId: string) => {
-    setMyList(prev => prev.includes(filmId) ? prev.filter(f => f !== filmId) : [...prev, filmId]);
+  const logout = useCallback(() => {
+    setActiveProfile(null);
+    localStorage.removeItem("stream_active_profile_id");
   }, []);
+
+  const toggleMyList = useCallback(async (filmId: string) => {
+    if (!activeProfile) return;
+    if (myList.includes(filmId)) {
+      setMyList(prev => prev.filter(f => f !== filmId));
+      await removeFromMyList(activeProfile.id, filmId).catch(console.error);
+    } else {
+      setMyList(prev => [...prev, filmId]);
+      await addToMyList(activeProfile.id, filmId).catch(console.error);
+    }
+  }, [activeProfile, myList]);
 
   const isInMyList = useCallback((filmId: string) => myList.includes(filmId), [myList]);
 
-  const getPlaybackTime = useCallback((filmId: string) => {
-    if (!activeProfile) return 0;
-    const data = loadJSON<Record<string, number>>(STORAGE_KEYS.playback(activeProfile.id), {});
-    return data[filmId] || 0;
-  }, [activeProfile]);
-
-  const setPlaybackTime = useCallback((filmId: string, time: number) => {
-    if (!activeProfile) return;
-    const key = STORAGE_KEYS.playback(activeProfile.id);
-    const data = loadJSON<Record<string, number>>(key, {});
-    data[filmId] = time;
-    localStorage.setItem(key, JSON.stringify(data));
-  }, [activeProfile]);
-
   return (
     <ProfileContext.Provider value={{
-      profiles, activeProfile, selectProfile, addProfile, deleteProfile, logout,
-      myList, toggleMyList, isInMyList, getPlaybackTime, setPlaybackTime,
+      profiles, activeProfile, loading, selectProfile, addProfile, removeProfile, logout,
+      myList, toggleMyList, isInMyList, refreshMyList,
     }}>
       {children}
     </ProfileContext.Provider>
