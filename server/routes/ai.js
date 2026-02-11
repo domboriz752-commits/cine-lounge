@@ -1,6 +1,12 @@
 import { Router } from "express";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import { read, update } from "../db.js";
 import model from "../utils/gemini.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const STORAGE_DIR = path.join(__dirname, "..", "storage", "films");
 
 const router = Router();
 
@@ -10,6 +16,32 @@ function filenameToTitle(name = "") {
     .replace(/[._]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+async function downloadPoster(url, filmDir) {
+  try {
+    if (!url || !url.startsWith("http")) return null;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const contentType = response.headers.get("content-type") || "";
+    let ext = ".jpg";
+    if (contentType.includes("png")) ext = ".png";
+    else if (contentType.includes("webp")) ext = ".webp";
+    const posterPath = path.join(filmDir, `poster${ext}`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    fs.writeFileSync(posterPath, buffer);
+    console.log(`  🖼️  Poster saved: ${posterPath}`);
+    return `/storage/films/${path.basename(filmDir)}/poster${ext}`;
+  } catch (err) {
+    console.warn(`  ⚠️  Poster download failed: ${err.message}`);
+    return null;
+  }
+}
+
+function saveMetaJson(filmDir, aiData) {
+  const metaPath = path.join(filmDir, "meta.json");
+  fs.writeFileSync(metaPath, JSON.stringify(aiData, null, 2));
+  console.log(`  📄 meta.json saved: ${metaPath}`);
 }
 
 router.post("/:id/ai/enrich", async (req, res) => {
@@ -84,11 +116,28 @@ Return JSON in this exact format:
 
     const generatedAt = new Date().toISOString();
 
+    // Ensure film storage directory exists
+    const filmDir = path.join(STORAGE_DIR, filmId);
+    if (!fs.existsSync(filmDir)) fs.mkdirSync(filmDir, { recursive: true });
+
+    // Download poster to film folder
+    let localPosterPath = null;
+    if (parsed.posterUrl) {
+      localPosterPath = await downloadPoster(parsed.posterUrl, filmDir);
+    }
+
+    // Save meta.json with full AI response
+    const metaPayload = {
+      generatedAt,
+      model: "gemini-2.0-flash",
+      data: parsed,
+    };
+    saveMetaJson(filmDir, metaPayload);
+
     await update((db2) => {
       const f = db2.films?.find((x) => x.id === filmId);
       if (!f) return;
 
-      // Use AI-cleaned title if available, fallback to derived
       const cleanTitle = (typeof parsed.title === "string" && parsed.title.trim()) ? parsed.title.trim() : derivedTitle;
       f.officialTitle = cleanTitle;
       f.displayTitle = cleanTitle;
@@ -97,22 +146,22 @@ Return JSON in this exact format:
       if (typeof parsed.description === "string") f.description = parsed.description;
       if (Array.isArray(parsed.genres)) f.genres = parsed.genres;
       if (typeof parsed.certification === "string") f.certification = parsed.certification;
-      if (typeof parsed.posterUrl === "string") f.posterUrl = parsed.posterUrl;
 
-      f.aiDetails = {
-        generatedAt,
-        model: "gemini-2.0-flash",
-        data: parsed,
-      };
+      // Use local poster path if downloaded, otherwise keep remote URL
+      if (localPosterPath) {
+        f.posterPath = localPosterPath;
+        f.posterUrl = localPosterPath;
+      } else if (typeof parsed.posterUrl === "string") {
+        f.posterUrl = parsed.posterUrl;
+      }
+
+      f.aiDetails = metaPayload;
     });
 
     res.json({
       success: true,
-      aiDetails: {
-        generatedAt,
-        model: "gemini-2.0-flash",
-        data: parsed,
-      },
+      aiDetails: metaPayload,
+      posterSaved: !!localPosterPath,
     });
   } catch (err) {
     console.error("AI enrichment error:", err);
