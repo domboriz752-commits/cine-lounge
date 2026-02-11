@@ -33,8 +33,17 @@ async function downloadPoster(url, filmDir) {
     console.log(`  🖼️  Poster saved: ${posterPath}`);
     return `/storage/films/${path.basename(filmDir)}/poster${ext}`;
   } catch (err) {
-    console.warn(`  ⚠️  Poster download failed: ${err.message}`);
-    return null;
+    console.warn(`  ⚠️  Poster download failed: ${err.message}, using fallback image`);
+    try {
+      const fallback = path.join(__dirname, "..", "utils", "Image_unavailable.png");
+      const destPath = path.join(filmDir, "poster.png");
+      fs.copyFileSync(fallback, destPath);
+      console.log(`  🖼️  Fallback poster copied: ${destPath}`);
+      return `/storage/films/${path.basename(filmDir)}/poster.png`;
+    } catch (copyErr) {
+      console.warn(`  ⚠️  Fallback copy also failed: ${copyErr.message}`);
+      return null;
+    }
   }
 }
 
