@@ -23,7 +23,7 @@ router.get("/", (req, res) => {
 // ── Get single film ──
 router.get("/:id", (req, res) => {
   const db = read();
-  const film = (db.films || []).find(f => f.id === req.params.id);
+  const film = (db.films || []).find((f) => f.id === req.params.id);
   if (!film) return res.status(404).json({ error: "Film not found" });
   res.json(film);
 });
@@ -66,7 +66,7 @@ router.post("/upload", upload.single("video"), async (req, res) => {
       aiDetails: null,
     };
 
-    await update(db => {
+    await update((db) => {
       if (!db.films) db.films = [];
       db.films.push(film);
     });
@@ -103,10 +103,12 @@ router.post("/upload-url", async (req, res) => {
     fs.writeFileSync(videoPath, buffer);
 
     const fileName = url.split("/").pop() || "video";
+    const filmTitle = title || fileName.replace(/\.[^.]+$/, "");
+
     const film = {
       id: filmId,
-      officialTitle: title || fileName.replace(/\.[^.]+$/, ""),
-      displayTitle: title || fileName.replace(/\.[^.]+$/, ""),
+      officialTitle: filmTitle,
+      displayTitle: filmTitle,
       year: parseInt(year) || 0,
       description: description || "",
       genres: genres || [],
@@ -115,6 +117,7 @@ router.post("/upload-url", async (req, res) => {
       width: 0,
       height: 0,
       storagePath: `/storage/films/${filmId}/video${ext}`,
+      posterUrl: "",
       posterPath: "",
       fileName,
       fileSize: buffer.length,
@@ -122,7 +125,7 @@ router.post("/upload-url", async (req, res) => {
       aiDetails: null,
     };
 
-    await update(db => {
+    await update((db) => {
       if (!db.films) db.films = [];
       db.films.push(film);
     });
@@ -139,14 +142,14 @@ router.delete("/:id", async (req, res) => {
   const filmId = req.params.id;
   const filmDir = path.join(STORAGE_DIR, filmId);
 
-  await update(db => {
-    db.films = (db.films || []).filter(f => f.id !== filmId);
+  await update((db) => {
+    db.films = (db.films || []).filter((f) => f.id !== filmId);
     // Clean up interactions referencing this film
     for (const profileId of Object.keys(db.interactions || {})) {
       const inter = db.interactions[profileId];
-      if (inter.myList) inter.myList = inter.myList.filter(f => f !== filmId);
-      if (inter.likes) inter.likes = inter.likes.filter(f => f !== filmId);
-      if (inter.dislikes) inter.dislikes = inter.dislikes.filter(f => f !== filmId);
+      if (inter.myList) inter.myList = inter.myList.filter((f) => f !== filmId);
+      if (inter.likes) inter.likes = inter.likes.filter((f) => f !== filmId);
+      if (inter.dislikes) inter.dislikes = inter.dislikes.filter((f) => f !== filmId);
       if (inter.watchHistory) delete inter.watchHistory[filmId];
       if (inter.surveyResponses) delete inter.surveyResponses[filmId];
     }
