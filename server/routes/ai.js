@@ -4,6 +4,14 @@ import openai from "../utils/openai.js";
 
 const router = Router();
 
+function filenameToTitle(name = "") {
+  const base = name.replace(/\.[^.]+$/, "");
+  return base
+    .replace(/[._]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 router.post("/:id/ai/enrich", async (req, res) => {
   if (!openai) {
     return res.status(503).json({ error: "OPENAI_API_KEY not configured" });
@@ -12,33 +20,38 @@ router.post("/:id/ai/enrich", async (req, res) => {
   try {
     const filmId = req.params.id;
     const db = read();
-    const film = db.films?.find(f => f.id === filmId);
+    const film = db.films?.find((f) => f.id === filmId);
 
     if (!film) {
       return res.status(404).json({ error: "Film not found" });
     }
 
+    // Title is ALWAYS derived from the filename (user doesn't input anything)
+    const derivedTitle = filenameToTitle(film.fileName || film.displayTitle || film.officialTitle || "Untitled");
+
     const prompt = `
-You are an AI film metadata generator. Given ONLY a filename, generate complete metadata for this movie/show.
+You are generating metadata for a locally uploaded video file.
 
 Rules:
-- Identify the film from the filename (it often contains the title, year, quality info).
-- If you recognize the title, use your knowledge to fill in accurate metadata.
-- If you don't recognize it, make reasonable inferences from the filename.
-- For posterUrl: find a real publicly accessible poster/thumbnail image URL from TMDB, IMDb, or similar. Use the format https://image.tmdb.org/t/p/w500/... if you know the TMDB poster path, or provide any known working poster URL. If unsure, return "".
-- Do NOT invent age ratings — use real ones or "Unrated".
+- Do NOT claim you watched the film.
+- You are allowed to infer likely metadata from the filename.
+- Do NOT invent official age ratings. If unknown, return "Unrated".
 - Output STRICT JSON only. No markdown. No explanations.
+- Keep title exactly as provided.
+- posterUrl must be a direct, publicly accessible image URL (ideally TMDB w500). If unsure, return "".
 
-Filename: ${film.fileName || film.displayTitle || film.officialTitle || "Unknown"}
+Title (from filename): ${derivedTitle}
+Original filename: ${film.fileName || ""}
 
 Return JSON in this exact format:
 {
-  "title": "",
+  "title": "${derivedTitle}",
   "year": 0,
   "description": "",
   "genres": [],
-  "certification": "",
+  "certification": "Unrated",
   "posterUrl": "",
+
   "logline": "",
   "shortSummary": "",
   "themes": [],
@@ -55,47 +68,57 @@ Return JSON in this exact format:
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
       input: prompt,
-      temperature: 0.7,
+      temperature: 0.4,
     });
 
     const rawText = response.output_text;
     let parsed;
     try {
-      // Strip markdown code fences if present
-      const cleaned = rawText.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      const cleaned = rawText
+        .replace(/```json\s*/gi, "")
+        .replace(/```\s*/g, "")
+        .trim();
       parsed = JSON.parse(cleaned);
     } catch {
       console.error("AI returned invalid JSON:", rawText);
       return res.status(500).json({ error: "AI returned invalid JSON", raw: rawText });
     }
 
-    // Update the film with AI-generated metadata
-    await update(db => {
-      const f = db.films?.find(f => f.id === filmId);
+    const generatedAt = new Date().toISOString();
+
+    await update((db2) => {
+      const f = db2.films?.find((x) => x.id === filmId);
       if (!f) return;
 
-      // Set core metadata from AI
-      if (parsed.title) {
-        f.officialTitle = parsed.title;
-        f.displayTitle = parsed.title;
-      }
-      if (parsed.year) f.year = parsed.year;
-      if (parsed.description) f.description = parsed.description;
-      if (parsed.genres?.length) f.genres = parsed.genres;
-      if (parsed.certification) f.certification = parsed.certification;
-      if (parsed.posterUrl) f.posterUrl = parsed.posterUrl;
+      // Force title from filename
+      f.officialTitle = derivedTitle;
+      f.displayTitle = derivedTitle;
+
+      // AI-generated metadata
+      if (typeof parsed.year === "number" && parsed.year > 0) f.year = parsed.year;
+      if (typeof parsed.description === "string") f.description = parsed.description;
+      if (Array.isArray(parsed.genres)) f.genres = parsed.genres;
+      if (typeof parsed.certification === "string") f.certification = parsed.certification;
+      if (typeof parsed.posterUrl === "string") f.posterUrl = parsed.posterUrl;
 
       f.aiDetails = {
-        generatedAt: new Date().toISOString(),
+        generatedAt,
         model: "gpt-4.1-mini",
         data: parsed,
       };
     });
 
-    res.json({ success: true, aiDetails: { generatedAt: new Date().toISOString(), model: "gpt-4.1-mini", data: parsed } });
+    res.json({
+      success: true,
+      aiDetails: {
+        generatedAt,
+        model: "gpt-4.1-mini",
+        data: parsed,
+      },
+    });
   } catch (err) {
     console.error("AI enrichment error:", err);
-    res.status(500).json({ error: err.message || "AI enrichment failed" });
+    res.status(500).json({ error: err?.message || "AI enrichment failed" });
   }
 });
 
