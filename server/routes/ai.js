@@ -66,6 +66,7 @@ Return JSON in this exact format:
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const rawText = response.text();
+    console.log("🤖 Gemini raw response:\n", rawText);
 
     let parsed;
     try {
