@@ -8,9 +8,9 @@ const genAI = process.env.GEMINI_API_KEY
   ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
   : null;
 
-const model = genAI
-  ? genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
-  : null;
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+
+const model = genAI ? genAI.getGenerativeModel({ model: MODEL }) : null;
 
 export async function checkGemini() {
   if (!model) {
@@ -21,7 +21,7 @@ export async function checkGemini() {
     const result = await model.generateContent('Respond with ONLY the word "OK" and nothing else.');
     const text = (await result.response).text().trim();
     if (text === "OK") {
-      console.log("✅ Gemini connection verified");
+      console.log(`✅ Gemini connection verified (${MODEL})`);
     } else {
       console.warn(`⚠️  Gemini responded unexpectedly: "${text}"`);
     }
