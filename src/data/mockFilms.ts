@@ -1,3 +1,53 @@
+// ── Canonical genre list ──
+
+export const GENRES = [
+  "Action", "Adventure", "Animation", "Biography", "Comedy", "Crime",
+  "Documentary", "Drama", "Family", "Fantasy", "Film-Noir", "History",
+  "Horror", "Music", "Musical", "Mystery", "Romance", "Sci-Fi",
+  "Sport", "Thriller", "War", "Western",
+] as const;
+
+export type Genre = (typeof GENRES)[number];
+
+// Normalize a genre string to its canonical form (case-insensitive match)
+export function normalizeGenre(raw: string): Genre | null {
+  const lower = raw.toLowerCase().trim();
+  // Common aliases
+  const aliases: Record<string, Genre> = {
+    "science fiction": "Sci-Fi",
+    "sci fi": "Sci-Fi",
+    "scifi": "Sci-Fi",
+    "noir": "Film-Noir",
+    "film noir": "Film-Noir",
+    "biographical": "Biography",
+    "biopic": "Biography",
+    "suspense": "Thriller",
+    "animated": "Animation",
+    "war film": "War",
+    "romantic": "Romance",
+    "love": "Romance",
+    "scary": "Horror",
+    "sports": "Sport",
+    "historical": "History",
+    "comedic": "Comedy",
+    "action-adventure": "Action",
+    "docu": "Documentary",
+  };
+  if (aliases[lower]) return aliases[lower];
+  return GENRES.find(g => g.toLowerCase() === lower) ?? null;
+}
+
+// Filter an array of raw genre strings to only canonical ones
+export function normalizeGenres(raw: string[]): Genre[] {
+  const result: Genre[] = [];
+  const seen = new Set<Genre>();
+  for (const r of raw) {
+    const g = normalizeGenre(r);
+    if (g && !seen.has(g)) { seen.add(g); result.push(g); }
+  }
+  return result;
+}
+
 // ── Film type & helpers (no more mock data) ──
 
 export interface Film {
