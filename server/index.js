@@ -10,6 +10,7 @@ import aiRoutes from "./routes/ai.js";
 import filmRoutes from "./routes/films.js";
 import { read, getDbPath } from "./db.js";
 import { checkGemini } from "./utils/gemini.js";
+import { startWatcher } from "./watcher.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -66,4 +67,5 @@ app.listen(PORT, async () => {
   console.log(`  📁 Database: ${getDbPath()}`);
   console.log(`  🎞️  Film storage: ${STORAGE_DIR}\n`);
   await checkGemini();
+  startWatcher();
 });
