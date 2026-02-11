@@ -12,8 +12,10 @@ export interface Film {
   duration?: number; // compat alias
   storagePath?: string;
   posterPath?: string;
+  posterUrl?: string;
   posterColor?: string;
   videoUrl?: string;
+  certification?: string;
   fileName?: string;
   fileSize?: number;
   uploadedAt?: string;

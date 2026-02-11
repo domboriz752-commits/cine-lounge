@@ -20,8 +20,12 @@ export default function HeroBanner({ films }: HeroBannerProps) {
 
   return (
     <div className="relative h-[70vh] w-full md:h-[85vh]">
-      {/* Dark gradient background */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${filmPosterColor(film)}`} />
+      {/* Background */}
+      {film.posterUrl ? (
+        <img src={film.posterUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      ) : (
+        <div className={`absolute inset-0 bg-gradient-to-br ${filmPosterColor(film)}`} />
+      )}
       <div className="hero-gradient-bottom absolute inset-0" />
       <div className="hero-gradient-left absolute inset-0" />
 

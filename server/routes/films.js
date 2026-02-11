@@ -36,7 +36,7 @@ router.post("/upload", upload.single("video"), async (req, res) => {
     }
 
     const filmId = uuid();
-    const ext = path.extname(req.file.originalname) || ".mp4";
+    const ext = path.extname(req.file.originalname).toLowerCase() || ".mp4";
     const filmDir = path.join(STORAGE_DIR, filmId);
     if (!fs.existsSync(filmDir)) fs.mkdirSync(filmDir, { recursive: true });
 
@@ -58,6 +58,7 @@ router.post("/upload", upload.single("video"), async (req, res) => {
       width: 0,
       height: 0,
       storagePath: `/storage/films/${filmId}/video${ext}`,
+      posterUrl: "",
       posterPath: "",
       fileName: req.file.originalname,
       fileSize: req.file.size,
