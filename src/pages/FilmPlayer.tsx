@@ -12,7 +12,7 @@ import { ArrowLeft, Play, Pause, Volume2, VolumeX, Maximize, Minimize } from "lu
 import { motion } from "framer-motion";
 import SurveyModal from "@/components/SurveyModal";
 
-const SURVEY_THRESHOLD = 0.15; // show survey after watching 15%
+const SURVEY_THRESHOLD = 0.15;
 
 export default function FilmPlayer() {
   const { id } = useParams<{ id: string }>();
@@ -31,21 +31,19 @@ export default function FilmPlayer() {
   const [surveyAnswered, setSurveyAnswered] = useState(false);
   const hideTimeout = useRef<number>();
   const lastSavedTime = useRef(0);
-  const watchStartTime = useRef<number | null>(null);
 
   useEffect(() => {
     if (!film || !activeProfile) { navigate("/home"); return; }
-    // Load saved position
     getWatchProgress(activeProfile.id, film.id).then(prog => {
       if (prog && videoRef.current) {
-        videoRef.current.currentTime = prog.last_position_sec;
-        setCurrentTime(prog.last_position_sec);
+        const pos = prog.lastPositionSec ?? (prog as any).last_position_sec ?? 0;
+        videoRef.current.currentTime = pos;
+        setCurrentTime(pos);
       }
-    });
-    // Check if survey already answered
+    }).catch(console.error);
     fetchRating(activeProfile.id, film.id).then(r => {
       if (r && r.liked !== null) setSurveyAnswered(true);
-    });
+    }).catch(console.error);
   }, [film, activeProfile]);
 
   const saveProgress = useCallback(async () => {
@@ -53,18 +51,13 @@ export default function FilmPlayer() {
     const pos = videoRef.current.currentTime;
     const delta = pos - lastSavedTime.current;
     if (Math.abs(delta) < 1) return;
-    const actualDelta = Math.max(0, delta);
     lastSavedTime.current = pos;
     await updateWatchProgress(
-      activeProfile.id,
-      film.id,
-      pos,
-      actualDelta,
+      activeProfile.id, film.id, pos, Math.max(0, delta),
       videoRef.current.duration || film.duration
     ).catch(console.error);
   }, [film, activeProfile]);
 
-  // Auto-save every 10s
   useEffect(() => {
     const interval = setInterval(saveProgress, 10000);
     return () => { clearInterval(interval); saveProgress(); };
@@ -75,7 +68,6 @@ export default function FilmPlayer() {
     if (!v || !film || !activeProfile) return;
     if (v.paused) {
       v.play(); setPlaying(true);
-      watchStartTime.current = v.currentTime;
       logWatchEvent(activeProfile.id, film.id, "PLAY", v.currentTime).catch(console.error);
     } else {
       v.pause(); setPlaying(false);
@@ -88,7 +80,6 @@ export default function FilmPlayer() {
     if (!film || !activeProfile) return;
     await logWatchEvent(activeProfile.id, film.id, "ENDED", videoRef.current?.duration || 0).catch(console.error);
     await saveProgress();
-    // Show survey
     if (!surveyAnswered) setShowSurvey(true);
   };
 
@@ -96,7 +87,6 @@ export default function FilmPlayer() {
     if (film && activeProfile && videoRef.current) {
       await logWatchEvent(activeProfile.id, film.id, "STOP", videoRef.current.currentTime).catch(console.error);
       await saveProgress();
-      // Show survey if watched enough
       const watchedPct = duration > 0 ? currentTime / duration : 0;
       if (!surveyAnswered && watchedPct >= SURVEY_THRESHOLD) {
         setShowSurvey(true);
@@ -109,11 +99,9 @@ export default function FilmPlayer() {
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (document.fullscreenElement) {
-      document.exitFullscreen();
-      setIsFullscreen(false);
+      document.exitFullscreen(); setIsFullscreen(false);
     } else {
-      containerRef.current.requestFullscreen();
-      setIsFullscreen(true);
+      containerRef.current.requestFullscreen(); setIsFullscreen(true);
     }
   };
 
@@ -134,7 +122,6 @@ export default function FilmPlayer() {
   if (!film) return null;
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
@@ -158,7 +145,6 @@ export default function FilmPlayer() {
           onLoadedMetadata={() => setDuration(videoRef.current?.duration || 0)}
           onEnded={handleEnded}
         />
-
         <motion.div
           className="absolute inset-0 flex flex-col justify-between"
           animate={{ opacity: showControls ? 1 : 0 }}
@@ -172,7 +158,6 @@ export default function FilmPlayer() {
             </button>
             <h2 className="text-lg font-medium text-foreground">{film.title}</h2>
           </div>
-
           {!playing && (
             <div className="flex items-center justify-center">
               <button
@@ -183,21 +168,15 @@ export default function FilmPlayer() {
               </button>
             </div>
           )}
-
           <div className="bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-8 md:px-8">
             <div className="group relative mb-3 h-1 w-full cursor-pointer rounded bg-muted">
               <div className="h-full rounded bg-primary" style={{ width: `${progress}%` }} />
               <input
-                type="range"
-                min={0}
-                max={duration || 0}
-                step={0.1}
-                value={currentTime}
+                type="range" min={0} max={duration || 0} step={0.1} value={currentTime}
                 onChange={handleSeek}
                 className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
               />
             </div>
-
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <button onClick={togglePlay} className="text-foreground">
@@ -217,7 +196,6 @@ export default function FilmPlayer() {
           </div>
         </motion.div>
       </div>
-
       {showSurvey && activeProfile && (
         <SurveyModal
           profileId={activeProfile.id}
