@@ -19,6 +19,9 @@ export interface Film {
   fileName?: string;
   fileSize?: number;
   uploadedAt?: string;
+  subtitlePath?: string;
+  width?: number;
+  height?: number;
   aiDetails?: {
     generatedAt: string;
     model: string;
@@ -28,9 +31,38 @@ export interface Film {
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-// Resolve display name
+// Robust filename → clean title parser
+export function parseFilenameTitle(fileName?: string): { title: string; year?: number } {
+  if (!fileName) return { title: "Untitled" };
+  // Remove extension
+  let base = fileName.replace(/\.[^.]+$/, "");
+  // Replace dots/underscores with spaces
+  base = base.replace(/[._]+/g, " ");
+  // Extract year (4 digits in parens or standalone 19xx/20xx)
+  let year: number | undefined;
+  const yearMatch = base.match(/[\s([\-]*((?:19|20)\d{2})[\s)\]]*(?:$|[\s\-])/);
+  if (yearMatch) {
+    year = parseInt(yearMatch[1]);
+    base = base.replace(yearMatch[0], " ");
+  }
+  // Strip common tags
+  const tags = /\b(1080p|720p|480p|2160p|4k|uhd|hdr|webrip|web-rip|web-dl|webdl|bluray|blu-ray|brrip|bdrip|dvdrip|hdtv|hdrip|x264|x265|h264|h265|hevc|avc|aac|ac3|dts|atmos|truehd|flac|mp3|remux|remastered|extended|unrated|directors cut|proper|repack|multi|dual|sub|subs|dubbed|eng|ita|fra|ger|spa|por|rus|hin|jpn|kor|chi|10bit|8bit|amzn|nf|hulu|dsnp|hmax|atvp|pcok|yts|rarbg|eztv|ettv|sparks|fgt|ion10|stuttershit|yify|shaanig|ganool|mkvcage|evo|tigole|qxr|ntb|ctrlhd|epsilon|drones|megusta|fleet|playar|vxt|cinemas|cinefile|joy|nogrp)\b/gi;
+  base = base.replace(tags, " ");
+  // Clean up extra spaces/hyphens
+  base = base.replace(/[\[\](){}]/g, " ").replace(/\s*-\s*/g, " ").replace(/\s+/g, " ").trim();
+  return { title: base || "Untitled", year };
+}
+
+// Resolve display name with full fallback chain
 export function filmTitle(f: Film): string {
-  return f.displayTitle || f.officialTitle || f.title || "Untitled";
+  return (
+    f.displayTitle ||
+    f.officialTitle ||
+    f.title ||
+    (f.aiDetails?.data as any)?.title ||
+    parseFilenameTitle(f.fileName).title ||
+    "Untitled"
+  );
 }
 
 // Resolve video URL

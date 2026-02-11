@@ -176,8 +176,13 @@ Return JSON in this exact format:
       f.aiDetails = metaPayload;
     });
 
+    // Read updated film
+    const updatedDb = read();
+    const updatedFilm = updatedDb.films?.find((x) => x.id === filmId);
+
     res.json({
       success: true,
+      film: updatedFilm || null,
       aiDetails: metaPayload,
       posterSaved: !!localPosterPath,
     });

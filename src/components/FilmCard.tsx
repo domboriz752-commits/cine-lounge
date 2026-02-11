@@ -51,7 +51,7 @@ export default function FilmCard({ film }: FilmCardProps) {
           </p>
           <div className="flex gap-2">
             <button
-              onClick={(e) => { e.stopPropagation(); navigate(`/film/${film.id}`); }}
+              onClick={(e) => { e.stopPropagation(); navigate(`/watch/${film.id}`); }}
               className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background transition hover:opacity-80"
             >
               <Play size={14} fill="currentColor" />
