@@ -128,9 +128,15 @@ export default function FilmPlayer() {
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = videoRef.current;
     if (!v) return;
-    v.currentTime = Number(e.target.value);
-    setCurrentTime(v.currentTime);
-    lastSavedTime.current = v.currentTime;
+    const newTime = Number(e.target.value);
+    const skippedDelta = newTime - v.currentTime;
+    v.currentTime = newTime;
+    setCurrentTime(newTime);
+    // Mark skipped region as watched progress
+    if (Math.abs(skippedDelta) > 1) {
+      lastSavedTime.current = newTime;
+      saveProgress();
+    }
   };
 
   const handleMouseMove = () => {

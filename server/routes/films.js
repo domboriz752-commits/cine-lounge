@@ -11,6 +11,20 @@ const STORAGE_DIR = path.join(__dirname, "..", "storage", "films");
 
 const router = Router();
 
+// Robust filename → clean title parser
+function parseFilenameTitle(fileName) {
+  if (!fileName) return "Untitled";
+  let base = fileName.replace(/\.[^.]+$/, "");
+  base = base.replace(/[._]+/g, " ");
+  // Remove year
+  base = base.replace(/[\s([\-]*((?:19|20)\d{2})[\s)\]]*(?:$|[\s\-])/i, " ");
+  // Strip common tags
+  const tags = /\b(1080p|720p|480p|2160p|4k|uhd|hdr|webrip|web-rip|web-dl|webdl|bluray|blu-ray|brrip|bdrip|dvdrip|hdtv|hdrip|x264|x265|h264|h265|hevc|avc|aac|ac3|dts|atmos|truehd|flac|mp3|remux|remastered|extended|unrated|directors cut|proper|repack|multi|dual|sub|subs|dubbed|eng|ita|fra|ger|spa|por|rus|hin|jpn|kor|chi|10bit|8bit|amzn|nf|hulu|dsnp|hmax|atvp|pcok|yts|rarbg|eztv|ettv|sparks|fgt|ion10|stuttershit|yify|shaanig|ganool|mkvcage|evo|tigole|qxr|ntb|ctrlhd|epsilon|drones|megusta|fleet|playar|vxt|cinemas|cinefile|joy|nogrp)\b/gi;
+  base = base.replace(tags, " ");
+  base = base.replace(/[\[\](){}]/g, " ").replace(/\s*-\s*/g, " ").replace(/\s+/g, " ").trim();
+  return base || "Untitled";
+}
+
 // Multer config — store in temp, then move to structured folder
 const upload = multer({ dest: path.join(__dirname, "..", "tmp") });
 
@@ -44,7 +58,7 @@ router.post("/upload", upload.single("video"), async (req, res) => {
     const videoPath = path.join(filmDir, `video${ext}`);
     fs.renameSync(req.file.path, videoPath);
 
-    const title = req.body.title || req.file.originalname.replace(/\.[^.]+$/, "");
+    const title = req.body.title || parseFilenameTitle(req.file.originalname);
 
     const film = {
       id: filmId,
@@ -103,7 +117,7 @@ router.post("/upload-url", async (req, res) => {
     fs.writeFileSync(videoPath, buffer);
 
     const fileName = url.split("/").pop() || "video";
-    const filmTitle = title || fileName.replace(/\.[^.]+$/, "");
+    const filmTitle = title || parseFilenameTitle(fileName);
 
     const film = {
       id: filmId,
@@ -161,6 +175,37 @@ router.delete("/:id", async (req, res) => {
   }
 
   res.json({ ok: true });
+});
+
+// ── Upload custom poster ──
+const posterUpload = multer({ dest: path.join(__dirname, "..", "tmp") });
+router.post("/:id/poster", posterUpload.single("poster"), async (req, res) => {
+  try {
+    const filmId = req.params.id;
+    if (!req.file) return res.status(400).json({ error: "No image file" });
+
+    const filmDir = path.join(STORAGE_DIR, filmId);
+    if (!fs.existsSync(filmDir)) fs.mkdirSync(filmDir, { recursive: true });
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+    const posterPath = path.join(filmDir, `poster${ext}`);
+    fs.renameSync(req.file.path, posterPath);
+
+    const posterUrl = `/storage/films/${filmId}/poster${ext}`;
+
+    await update((db) => {
+      const f = (db.films || []).find((x) => x.id === filmId);
+      if (f) {
+        f.posterUrl = posterUrl;
+        f.posterPath = posterUrl;
+      }
+    });
+
+    res.json({ success: true, posterUrl });
+  } catch (err) {
+    console.error("Poster upload error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

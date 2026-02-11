@@ -200,6 +200,6 @@ export interface AiDetails {
   data: AiEnrichmentData;
 }
 
-export async function enrichFilmWithAI(filmId: string): Promise<{ success: boolean; aiDetails: AiDetails }> {
+export async function enrichFilmWithAI(filmId: string): Promise<{ success: boolean; film: any; aiDetails: AiDetails }> {
   return api(`/api/films/${filmId}/ai/enrich`, { method: "POST" });
 }

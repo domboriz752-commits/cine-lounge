@@ -7,6 +7,7 @@ import { ProfileProvider, useProfile } from "@/contexts/ProfileContext";
 import Profiles from "./pages/Profiles";
 import Home from "./pages/Home";
 import FilmPlayer from "./pages/FilmPlayer";
+import FilmDetail from "./pages/FilmDetail";
 import SearchPage from "./pages/SearchPage";
 import MyList from "./pages/MyList";
 import UploadPage from "./pages/UploadPage";
@@ -28,7 +29,8 @@ function AppRoutes() {
       <Route path="/profiles" element={<Profiles />} />
       <Route path="/" element={<Navigate to={activeProfile ? "/home" : "/profiles"} replace />} />
       <Route path="/home" element={<RequireProfile><Home /></RequireProfile>} />
-      <Route path="/film/:id" element={<RequireProfile><FilmPlayer /></RequireProfile>} />
+      <Route path="/film/:id" element={<RequireProfile><FilmDetail /></RequireProfile>} />
+      <Route path="/watch/:id" element={<RequireProfile><FilmPlayer /></RequireProfile>} />
       <Route path="/search" element={<RequireProfile><SearchPage /></RequireProfile>} />
       <Route path="/my-list" element={<RequireProfile><MyList /></RequireProfile>} />
       <Route path="/upload" element={<RequireProfile><UploadPage /></RequireProfile>} />
