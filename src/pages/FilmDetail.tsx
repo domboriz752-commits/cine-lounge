@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
-import { type Film, filmTitle, filmVideoUrl, filmPosterColor, formatDuration } from "@/data/mockFilms";
+import { type Film, filmTitle, filmVideoUrl, filmPosterColor, filmPosterUrl, formatDuration } from "@/data/mockFilms";
 import { useProfile } from "@/contexts/ProfileContext";
 import { fetchFilm, fetchRating, upsertRating } from "@/lib/api";
 import { ArrowLeft, Play, Plus, Check, ThumbsUp, ThumbsDown, ImagePlus } from "lucide-react";
@@ -69,6 +69,7 @@ export default function FilmDetail() {
 
   const title = filmTitle(film);
   const videoSrc = filmVideoUrl(film);
+  const poster = filmPosterUrl(film);
   const inList = isInMyList(film.id);
   const duration = film.runtimeSec || film.duration || 0;
   const aiData = film.aiDetails?.data as Record<string, unknown> | undefined;
@@ -98,8 +99,8 @@ export default function FilmDetail() {
             animate={{ scale: isFadingOut ? 1.0 : 1.05 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
           />
-        ) : film.posterUrl ? (
-          <img src={film.posterUrl} alt="" className="h-full w-full object-cover" />
+        ) : poster ? (
+          <img src={poster} alt="" className="h-full w-full object-cover" />
         ) : (
           <div className={`h-full w-full bg-gradient-to-br ${filmPosterColor(film)}`} />
         )}
