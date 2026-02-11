@@ -46,6 +46,7 @@ export default function ContinueWatchingRow({ items }: ContinueWatchingRowProps)
           {items.map(item => {
             const film = getFilmById(item.film_id);
             if (!film) return null;
+            const pct = item.completionPct ?? (item as any).completion_pct ?? 0;
             return (
               <div
                 key={item.film_id}
@@ -57,13 +58,12 @@ export default function ContinueWatchingRow({ items }: ContinueWatchingRowProps)
                   <div className="film-card-overlay absolute inset-0 flex flex-col justify-end p-3">
                     <p className="mb-1 text-sm font-semibold text-foreground">{film.title}</p>
                     <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{Math.round(item.completion_pct)}% watched</span>
+                      <span>{Math.round(pct)}% watched</span>
                     </div>
-                    {/* Progress bar */}
                     <div className="h-1 w-full rounded bg-muted">
                       <div
                         className="h-full rounded bg-primary"
-                        style={{ width: `${Math.min(item.completion_pct, 100)}%` }}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
                       />
                     </div>
                   </div>

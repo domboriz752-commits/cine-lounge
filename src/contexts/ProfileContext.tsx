@@ -37,7 +37,7 @@ const PROFILE_COLORS = ["#e50914", "#0071eb", "#b4d455", "#e8b708", "#6d28d9", "
 const PROFILE_ICONS = ["👤", "🎬", "🍿", "🎭", "🌟", "🎯"];
 
 function dbToProfile(p: DbProfile): Profile {
-  return { id: p.id, name: p.name, color: p.avatar_color, icon: p.avatar_icon };
+  return { id: p.id, name: p.name, color: p.avatar?.color || "#e50914", icon: p.avatar?.icon || "👤" };
 }
 
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
@@ -46,13 +46,11 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [myList, setMyList] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load profiles from DB
   useEffect(() => {
     fetchProfiles()
       .then(data => {
         const mapped = data.map(dbToProfile);
         setProfiles(mapped);
-        // Restore active profile from localStorage cache
         const cachedId = localStorage.getItem("stream_active_profile_id");
         if (cachedId) {
           const found = mapped.find(p => p.id === cachedId);
@@ -63,7 +61,6 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Load my list when active profile changes
   const refreshMyList = useCallback(async () => {
     if (!activeProfile) { setMyList([]); return; }
     try {
@@ -74,9 +71,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeProfile]);
 
-  useEffect(() => {
-    refreshMyList();
-  }, [refreshMyList]);
+  useEffect(() => { refreshMyList(); }, [refreshMyList]);
 
   const selectProfile = useCallback((profile: Profile) => {
     setActiveProfile(profile);

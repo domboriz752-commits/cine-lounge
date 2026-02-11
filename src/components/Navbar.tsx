@@ -36,7 +36,7 @@ export default function Navbar() {
     >
       <div className="flex items-center gap-8">
         <Link to="/home" className="text-2xl font-bold tracking-tight text-primary">
-          STREAMFLIX
+          VETRO
         </Link>
         <div className="hidden items-center gap-5 md:flex">
           {navItems.map(item => (

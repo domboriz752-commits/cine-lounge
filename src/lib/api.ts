@@ -1,81 +1,87 @@
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-export type DbProfile = Tables<"profiles">;
-export type DbMyList = Tables<"my_list">;
-export type DbRating = Tables<"ratings">;
-export type DbWatchHistory = Tables<"watch_history">;
-export type DbWatchEvent = Tables<"watch_events">;
+// ── Types ──
+
+export interface DbProfile {
+  id: string;
+  name: string;
+  avatar: { color: string; icon: string };
+  createdAt: string;
+  lastActiveAt: string;
+}
+
+export interface DbWatchHistory {
+  film_id: string;
+  lastPositionSec: number;
+  totalWatchedSec: number;
+  durationSec: number;
+  completionPct: number;
+  completed: boolean;
+  lastWatchedAt: string;
+}
+
+export interface DbRating {
+  liked: boolean | null;
+  surveyEnjoyed: boolean | null;
+  feedbackText: string;
+  selectedTags: string[];
+  answeredAt: string;
+}
+
+async function api(path: string, opts?: RequestInit) {
+  const res = await fetch(`${API}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
 
 // ── Profiles ──
 
 export async function fetchProfiles(): Promise<DbProfile[]> {
-  const { data, error } = await supabase.from("profiles").select("*").order("created_at");
-  if (error) throw error;
-  return data;
+  return api("/api/profiles");
 }
 
 export async function createProfile(name: string, color: string, icon: string): Promise<DbProfile> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .insert({ name, avatar_color: color, avatar_icon: icon })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+  return api("/api/profiles", {
+    method: "POST",
+    body: JSON.stringify({ name, color, icon }),
+  });
 }
 
 export async function deleteProfile(id: string) {
-  const { error } = await supabase.from("profiles").delete().eq("id", id);
-  if (error) throw error;
+  return api(`/api/profiles/${id}`, { method: "DELETE" });
 }
 
 export async function activateProfile(id: string) {
-  const { error } = await supabase
-    .from("profiles")
-    .update({ last_active_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) throw error;
+  return api(`/api/profiles/${id}/activate`, { method: "POST" });
 }
 
 // ── My List ──
 
 export async function fetchMyList(profileId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from("my_list")
-    .select("film_id")
-    .eq("profile_id", profileId);
-  if (error) throw error;
-  return data.map(r => r.film_id);
+  return api(`/api/profiles/${profileId}/my-list`);
 }
 
 export async function addToMyList(profileId: string, filmId: string) {
-  const { error } = await supabase
-    .from("my_list")
-    .upsert({ profile_id: profileId, film_id: filmId }, { onConflict: "profile_id,film_id" });
-  if (error) throw error;
+  return api(`/api/profiles/${profileId}/my-list/add`, {
+    method: "POST",
+    body: JSON.stringify({ filmId }),
+  });
 }
 
 export async function removeFromMyList(profileId: string, filmId: string) {
-  const { error } = await supabase
-    .from("my_list")
-    .delete()
-    .eq("profile_id", profileId)
-    .eq("film_id", filmId);
-  if (error) throw error;
+  return api(`/api/profiles/${profileId}/my-list/remove`, {
+    method: "POST",
+    body: JSON.stringify({ filmId }),
+  });
 }
 
 // ── Ratings ──
 
 export async function fetchRating(profileId: string, filmId: string): Promise<DbRating | null> {
-  const { data, error } = await supabase
-    .from("ratings")
-    .select("*")
-    .eq("profile_id", profileId)
-    .eq("film_id", filmId)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+  return api(`/api/profiles/${profileId}/film/${filmId}/rating`);
 }
 
 export async function upsertRating(
@@ -86,42 +92,20 @@ export async function upsertRating(
   surveyReason?: string | null,
   surveyTags?: string[]
 ) {
-  const { error } = await supabase.from("ratings").upsert(
-    {
-      profile_id: profileId,
-      film_id: filmId,
-      liked,
-      survey_enjoyed: surveyEnjoyed ?? null,
-      survey_reason: surveyReason ?? null,
-      survey_tags: surveyTags ?? [],
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "profile_id,film_id" }
-  );
-  if (error) throw error;
+  return api(`/api/profiles/${profileId}/film/${filmId}/rating`, {
+    method: "POST",
+    body: JSON.stringify({ liked, surveyEnjoyed, surveyReason, surveyTags }),
+  });
 }
 
 // ── Watch History ──
 
 export async function fetchWatchHistory(profileId: string): Promise<DbWatchHistory[]> {
-  const { data, error } = await supabase
-    .from("watch_history")
-    .select("*")
-    .eq("profile_id", profileId)
-    .order("last_watched_at", { ascending: false });
-  if (error) throw error;
-  return data;
+  return api(`/api/profiles/${profileId}/watch-history`);
 }
 
 export async function getWatchProgress(profileId: string, filmId: string): Promise<DbWatchHistory | null> {
-  const { data, error } = await supabase
-    .from("watch_history")
-    .select("*")
-    .eq("profile_id", profileId)
-    .eq("film_id", filmId)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+  return api(`/api/profiles/${profileId}/film/${filmId}/progress`);
 }
 
 export async function updateWatchProgress(
@@ -131,30 +115,13 @@ export async function updateWatchProgress(
   totalWatchedDeltaSec: number,
   durationSec: number
 ) {
-  // Fetch existing
-  const existing = await getWatchProgress(profileId, filmId);
-  const totalWatched = (existing?.total_watched_sec ?? 0) + totalWatchedDeltaSec;
-  const completionPct = durationSec > 0 ? Math.min((totalWatched / durationSec) * 100, 100) : 0;
-  const completed = completionPct >= 90;
-
-  const { error } = await supabase.from("watch_history").upsert(
-    {
-      profile_id: profileId,
-      film_id: filmId,
-      last_position_sec: positionSec,
-      total_watched_sec: totalWatched,
-      duration_sec: durationSec,
-      completion_pct: Math.round(completionPct * 100) / 100,
-      completed,
-      last_watched_at: new Date().toISOString(),
-    },
-    { onConflict: "profile_id,film_id" }
-  );
-  if (error) throw error;
-  return { completionPct, completed };
+  return api(`/api/profiles/${profileId}/film/${filmId}/progress`, {
+    method: "POST",
+    body: JSON.stringify({ positionSec, totalWatchedDeltaSec, durationSec }),
+  });
 }
 
-// ── Watch Events ──
+// ── Events ──
 
 export async function logWatchEvent(
   profileId: string,
@@ -162,26 +129,14 @@ export async function logWatchEvent(
   eventType: "PLAY" | "PAUSE" | "STOP" | "ENDED",
   positionSec: number
 ) {
-  const { error } = await supabase.from("watch_events").insert({
-    profile_id: profileId,
-    film_id: filmId,
-    event_type: eventType,
-    position_sec: positionSec,
+  return api(`/api/profiles/${profileId}/film/${filmId}/event`, {
+    method: "POST",
+    body: JSON.stringify({ type: eventType, positionSec }),
   });
-  if (error) throw error;
 }
 
 // ── Continue Watching ──
 
 export async function fetchContinueWatching(profileId: string): Promise<DbWatchHistory[]> {
-  const { data, error } = await supabase
-    .from("watch_history")
-    .select("*")
-    .eq("profile_id", profileId)
-    .eq("completed", false)
-    .gt("total_watched_sec", 0)
-    .order("last_watched_at", { ascending: false })
-    .limit(10);
-  if (error) throw error;
-  return data;
+  return api(`/api/profiles/${profileId}/continue-watching`);
 }
