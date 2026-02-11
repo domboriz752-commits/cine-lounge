@@ -21,8 +21,8 @@ export default function Navbar() {
 
   const navItems = [
     { label: "Home", path: "/home" },
-    { label: "Movies", path: "/home" },
     { label: "My List", path: "/my-list" },
+    { label: "Upload", path: "/upload" },
   ];
 
   return (

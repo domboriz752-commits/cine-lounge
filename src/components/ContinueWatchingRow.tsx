@@ -1,18 +1,21 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Play } from "lucide-react";
-import { getFilmById, formatDuration } from "@/data/mockFilms";
+import { type Film, filmTitle, filmPosterColor } from "@/data/mockFilms";
 import type { DbWatchHistory } from "@/lib/api";
 
 interface ContinueWatchingRowProps {
   items: DbWatchHistory[];
+  films: Film[];
 }
 
-export default function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
+export default function ContinueWatchingRow({ items, films }: ContinueWatchingRowProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [showLeft, setShowLeft] = useState(false);
   const [showRight, setShowRight] = useState(true);
+
+  const getFilm = (id: string) => films.find(f => f.id === id);
 
   const checkScroll = () => {
     const el = scrollRef.current;
@@ -44,7 +47,7 @@ export default function ContinueWatchingRow({ items }: ContinueWatchingRowProps)
         )}
         <div ref={scrollRef} onScroll={checkScroll} className="scrollbar-hide flex gap-2 overflow-x-auto px-4 md:px-12">
           {items.map(item => {
-            const film = getFilmById(item.film_id);
+            const film = getFilm(item.film_id);
             if (!film) return null;
             const pct = item.completionPct ?? (item as any).completion_pct ?? 0;
             return (
@@ -54,9 +57,9 @@ export default function ContinueWatchingRow({ items }: ContinueWatchingRowProps)
                 style={{ width: "280px" }}
                 onClick={() => navigate(`/film/${film.id}`)}
               >
-                <div className={`aspect-video w-full bg-gradient-to-br ${film.posterColor} flex items-end`}>
+                <div className={`aspect-video w-full bg-gradient-to-br ${filmPosterColor(film)} flex items-end`}>
                   <div className="film-card-overlay absolute inset-0 flex flex-col justify-end p-3">
-                    <p className="mb-1 text-sm font-semibold text-foreground">{film.title}</p>
+                    <p className="mb-1 text-sm font-semibold text-foreground">{filmTitle(film)}</p>
                     <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                       <span>{Math.round(pct)}% watched</span>
                     </div>

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import FilmCard from "./FilmCard";
-import { Film } from "@/data/mockFilms";
+import { type Film } from "@/data/mockFilms";
 
 interface ContentRowProps {
   title: string;
@@ -26,6 +26,8 @@ export default function ContentRow({ title, films }: ContentRowProps) {
     const amount = el.clientWidth * 0.8;
     el.scrollBy({ left: dir === "left" ? -amount : amount, behavior: "smooth" });
   };
+
+  if (!films.length) return null;
 
   return (
     <div className="group/row relative mb-8">

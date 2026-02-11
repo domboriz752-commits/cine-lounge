@@ -141,6 +141,44 @@ export async function fetchContinueWatching(profileId: string): Promise<DbWatchH
   return api(`/api/profiles/${profileId}/continue-watching`);
 }
 
+// ── Films ──
+
+import type { Film } from "@/data/mockFilms";
+
+export async function fetchFilms(): Promise<Film[]> {
+  return api("/api/films");
+}
+
+export async function fetchFilm(id: string): Promise<Film> {
+  return api(`/api/films/${id}`);
+}
+
+export async function uploadFilm(formData: FormData): Promise<{ success: boolean; film: Film }> {
+  const res = await fetch(`${API}/api/films/upload`, {
+    method: "POST",
+    body: formData, // no Content-Type header — let browser set multipart boundary
+  });
+  if (!res.ok) throw new Error(`Upload failed: ${await res.text()}`);
+  return res.json();
+}
+
+export async function uploadFilmFromUrl(data: {
+  url: string;
+  title?: string;
+  year?: number;
+  description?: string;
+  genres?: string[];
+}): Promise<{ success: boolean; film: Film }> {
+  return api("/api/films/upload-url", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteFilm(id: string) {
+  return api(`/api/films/${id}`, { method: "DELETE" });
+}
+
 // ── AI Enrichment ──
 
 export interface AiEnrichmentData {

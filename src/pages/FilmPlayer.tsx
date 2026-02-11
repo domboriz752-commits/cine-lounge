@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { getFilmById, formatDuration } from "@/data/mockFilms";
+import { type Film, filmTitle, filmVideoUrl, formatDuration } from "@/data/mockFilms";
 import { useProfile } from "@/contexts/ProfileContext";
 import {
+  fetchFilm,
   getWatchProgress,
   updateWatchProgress,
   logWatchEvent,
@@ -17,10 +18,10 @@ const SURVEY_THRESHOLD = 0.15;
 export default function FilmPlayer() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const film = getFilmById(id || "");
   const { activeProfile } = useProfile();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [film, setFilm] = useState<Film | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -33,7 +34,12 @@ export default function FilmPlayer() {
   const lastSavedTime = useRef(0);
 
   useEffect(() => {
-    if (!film || !activeProfile) { navigate("/home"); return; }
+    if (!id) { navigate("/home"); return; }
+    fetchFilm(id).then(setFilm).catch(() => navigate("/home"));
+  }, [id]);
+
+  useEffect(() => {
+    if (!film || !activeProfile) return;
     getWatchProgress(activeProfile.id, film.id).then(prog => {
       if (prog && videoRef.current) {
         const pos = prog.lastPositionSec ?? (prog as any).last_position_sec ?? 0;
@@ -54,7 +60,7 @@ export default function FilmPlayer() {
     lastSavedTime.current = pos;
     await updateWatchProgress(
       activeProfile.id, film.id, pos, Math.max(0, delta),
-      videoRef.current.duration || film.duration
+      videoRef.current.duration || film.runtimeSec || film.duration || 0
     ).catch(console.error);
   }, [film, activeProfile]);
 
@@ -119,8 +125,11 @@ export default function FilmPlayer() {
     hideTimeout.current = window.setTimeout(() => { if (playing) setShowControls(false); }, 3000);
   };
 
-  if (!film) return null;
+  if (!film) return <div className="flex h-screen items-center justify-center bg-black text-foreground">Loading...</div>;
 
+  const title = filmTitle(film);
+  const videoSrc = filmVideoUrl(film);
+  const filmDuration = film.runtimeSec || film.duration || 0;
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -138,7 +147,7 @@ export default function FilmPlayer() {
       >
         <video
           ref={videoRef}
-          src={film.videoUrl}
+          src={videoSrc}
           className="h-full w-full object-contain"
           muted={muted}
           onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime || 0)}
@@ -156,7 +165,7 @@ export default function FilmPlayer() {
             <button onClick={handleExit} className="text-foreground hover:text-primary">
               <ArrowLeft size={24} />
             </button>
-            <h2 className="text-lg font-medium text-foreground">{film.title}</h2>
+            <h2 className="text-lg font-medium text-foreground">{title}</h2>
           </div>
           {!playing && (
             <div className="flex items-center justify-center">
@@ -196,11 +205,11 @@ export default function FilmPlayer() {
           </div>
         </motion.div>
       </div>
-      {showSurvey && activeProfile && (
+      {showSurvey && activeProfile && film && (
         <SurveyModal
           profileId={activeProfile.id}
           filmId={film.id}
-          filmTitle={film.title}
+          filmTitle={title}
           onClose={() => {
             setShowSurvey(false);
             setSurveyAnswered(true);

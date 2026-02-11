@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Play, Plus, Check } from "lucide-react";
-import { Film, formatDuration } from "@/data/mockFilms";
+import { type Film, filmTitle, filmPosterColor, formatDuration } from "@/data/mockFilms";
 import { useProfile } from "@/contexts/ProfileContext";
 import { motion } from "framer-motion";
 
@@ -14,6 +14,8 @@ export default function FilmCard({ film }: FilmCardProps) {
   const { toggleMyList, isInMyList } = useProfile();
   const [hovered, setHovered] = useState(false);
   const inList = isInMyList(film.id);
+  const title = filmTitle(film);
+  const duration = film.runtimeSec || film.duration || 0;
 
   return (
     <motion.div
@@ -24,15 +26,13 @@ export default function FilmCard({ film }: FilmCardProps) {
       whileHover={{ scale: 1.05, zIndex: 10 }}
       onClick={() => navigate(`/film/${film.id}`)}
     >
-      {/* Poster */}
-      <div className={`aspect-[2/3] w-full bg-gradient-to-br ${film.posterColor} flex items-end`}>
+      <div className={`aspect-[2/3] w-full bg-gradient-to-br ${filmPosterColor(film)} flex items-end`}>
         <div className="w-full p-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-white/60">{film.year}</p>
-          <p className="mt-0.5 text-sm font-semibold leading-tight text-white">{film.title}</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-white/60">{film.year > 0 ? film.year : ""}</p>
+          <p className="mt-0.5 text-sm font-semibold leading-tight text-white">{title}</p>
         </div>
       </div>
 
-      {/* Hover Overlay */}
       {hovered && (
         <motion.div
           className="film-card-overlay absolute inset-0 flex flex-col justify-end p-3"
@@ -40,7 +40,9 @@ export default function FilmCard({ film }: FilmCardProps) {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.15 }}
         >
-          <p className="mb-1 text-xs text-muted-foreground">{formatDuration(film.duration)} · {film.genres[0]}</p>
+          <p className="mb-1 text-xs text-muted-foreground">
+            {duration > 0 ? formatDuration(duration) : ""}{film.genres?.[0] ? ` · ${film.genres[0]}` : ""}
+          </p>
           <div className="flex gap-2">
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/film/${film.id}`); }}

@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import FilmPlayer from "./pages/FilmPlayer";
 import SearchPage from "./pages/SearchPage";
 import MyList from "./pages/MyList";
+import UploadPage from "./pages/UploadPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ function AppRoutes() {
       <Route path="/film/:id" element={<RequireProfile><FilmPlayer /></RequireProfile>} />
       <Route path="/search" element={<RequireProfile><SearchPage /></RequireProfile>} />
       <Route path="/my-list" element={<RequireProfile><MyList /></RequireProfile>} />
+      <Route path="/upload" element={<RequireProfile><UploadPage /></RequireProfile>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

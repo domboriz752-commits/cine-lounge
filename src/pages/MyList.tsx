@@ -1,11 +1,19 @@
+import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import FilmCard from "@/components/FilmCard";
 import { useProfile } from "@/contexts/ProfileContext";
-import { films } from "@/data/mockFilms";
+import { fetchFilms } from "@/lib/api";
+import { type Film } from "@/data/mockFilms";
 import { motion } from "framer-motion";
 
 export default function MyList() {
   const { myList } = useProfile();
+  const [films, setFilms] = useState<Film[]>([]);
+
+  useEffect(() => {
+    fetchFilms().then(setFilms).catch(console.error);
+  }, []);
+
   const listFilms = films.filter(f => myList.includes(f.id));
 
   return (

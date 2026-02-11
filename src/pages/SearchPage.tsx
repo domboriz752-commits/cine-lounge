@@ -1,13 +1,26 @@
-import { useState, useMemo } from "react";
-import { searchFilms, films as allFilms } from "@/data/mockFilms";
+import { useState, useMemo, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import FilmCard from "@/components/FilmCard";
+import { type Film, filmTitle } from "@/data/mockFilms";
+import { fetchFilms } from "@/lib/api";
 import { Search as SearchIcon } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
-  const results = useMemo(() => (query.trim() ? searchFilms(query) : allFilms), [query]);
+  const [films, setFilms] = useState<Film[]>([]);
+
+  useEffect(() => {
+    fetchFilms().then(setFilms).catch(console.error);
+  }, []);
+
+  const results = useMemo(() => {
+    if (!query.trim()) return films;
+    const q = query.toLowerCase();
+    return films.filter(
+      f => filmTitle(f).toLowerCase().includes(q) || f.genres?.some(g => g.toLowerCase().includes(q))
+    );
+  }, [query, films]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -34,6 +47,9 @@ export default function SearchPage() {
         </motion.div>
         {results.length === 0 && query.trim() && (
           <p className="mt-12 text-center text-muted-foreground">No results for "{query}"</p>
+        )}
+        {films.length === 0 && !query.trim() && (
+          <p className="mt-12 text-center text-muted-foreground">No films uploaded yet.</p>
         )}
       </div>
     </div>
