@@ -16,12 +16,12 @@ function printHelp() {
   🎬 Vetro CLI
 
   Commands:
-    list                   List all films
-    scan                   Scan storage for new films & register them
-    scan --enrich          Scan + run AI enrichment on new films
-    remove <id>            Remove a film by ID
-    remove-all             Remove ALL films
-    info <id>              Show details for a film
+    list                   List all films & series
+    scan                   Scan storage for new films/episodes & register them
+    scan --enrich          Scan + run AI enrichment on new items
+    remove <id>            Remove a film/series by ID
+    remove-all             Remove ALL films & series
+    info <id>              Show details for a film/series
     help                   Show this help
 
   Examples:
@@ -40,11 +40,12 @@ function listFilms() {
     console.log("  No films in database.");
     return;
   }
-  console.log(`\n  📽️  ${films.length} film(s):\n`);
+  console.log(`\n  📽️  ${films.length} item(s):\n`);
   for (const f of films) {
     const title = f.displayTitle || f.officialTitle || f.fileName || "Untitled";
     const size = f.fileSize ? `${(f.fileSize / (1024 * 1024)).toFixed(1)} MB` : "?";
-    console.log(`  ${f.id}  ${title}  (${f.year || "?"})  [${size}]`);
+    const type = f.isSeries ? `📺 Series (${(f.episodes || []).length} eps)` : "🎬 Film";
+    console.log(`  ${f.id}  ${title}  (${f.year || "?"})  [${size}]  ${type}`);
   }
   console.log();
 }
@@ -66,7 +67,14 @@ async function removeFilm(filmId) {
       if (inter.myList) inter.myList = inter.myList.filter((f) => f !== filmId);
       if (inter.likes) inter.likes = inter.likes.filter((f) => f !== filmId);
       if (inter.dislikes) inter.dislikes = inter.dislikes.filter((f) => f !== filmId);
-      if (inter.watchHistory) delete inter.watchHistory[filmId];
+      if (inter.watchHistory) {
+        // Remove all episode progress too
+        for (const key of Object.keys(inter.watchHistory)) {
+          if (key === filmId || key.startsWith(filmId + ":")) {
+            delete inter.watchHistory[key];
+          }
+        }
+      }
       if (inter.surveyResponses) delete inter.surveyResponses[filmId];
     }
   });
@@ -108,7 +116,7 @@ async function removeAll() {
     }
   }
 
-  console.log(`  ✅ Removed all ${count} film(s) and their storage files.`);
+  console.log(`  ✅ Removed all ${count} item(s) and their storage files.`);
 }
 
 function showInfo(filmId) {
@@ -118,7 +126,7 @@ function showInfo(filmId) {
     console.error(`  ❌ Film not found: ${filmId}`);
     process.exit(1);
   }
-  console.log(`\n  📽️  Film Details:\n`);
+  console.log(`\n  📽️  Details:\n`);
   console.log(JSON.stringify(film, null, 2));
   console.log();
 }
@@ -131,7 +139,7 @@ switch (command) {
     break;
   case "scan": {
     const enrich = args.includes("--enrich");
-    console.log(`\n  🔍 Scanning for new films...${enrich ? " (with AI enrichment)" : ""}\n`);
+    console.log(`\n  🔍 Scanning for new films/episodes...${enrich ? " (with AI enrichment)" : ""}\n`);
     await scanForNewFilms({ enrich });
     break;
   }

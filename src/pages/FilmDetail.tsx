@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
-import { type Film, filmTitle, filmVideoUrl, filmPosterColor, filmPosterUrl, formatDuration } from "@/data/mockFilms";
+import { type Film, type Episode, filmTitle, filmVideoUrl, filmPosterColor, filmPosterUrl, formatDuration, getSortedEpisodes, episodeLabel } from "@/data/mockFilms";
 import { useProfile } from "@/contexts/ProfileContext";
-import { fetchFilm, fetchRating, upsertRating } from "@/lib/api";
+import { fetchFilm, fetchRating, upsertRating, getSeriesProgress } from "@/lib/api";
 import { ArrowLeft, Play, Plus, Check, ThumbsUp, ThumbsDown, ImagePlus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/Navbar";
@@ -17,6 +17,7 @@ export default function FilmDetail() {
   const [film, setFilm] = useState<Film | null>(null);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [liked, setLiked] = useState<boolean | null>(null);
+  const [episodeProgress, setEpisodeProgress] = useState<Record<string, any>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const posterInputRef = useRef<HTMLInputElement>(null);
 
@@ -30,13 +31,36 @@ export default function FilmDetail() {
     fetchRating(activeProfile.id, film.id).then(r => {
       if (r) setLiked(r.liked);
     }).catch(() => {});
+    // Load episode progress for series
+    if (film.isSeries) {
+      getSeriesProgress(activeProfile.id, film.id)
+        .then(setEpisodeProgress)
+        .catch(() => {});
+    }
   }, [film, activeProfile]);
 
-  const handlePlay = () => {
+  const handlePlay = (episodeId?: string) => {
     setIsFadingOut(true);
     setTimeout(() => {
-      navigate(`/watch/${film!.id}`);
+      if (episodeId) {
+        navigate(`/watch/${film!.id}?episode=${episodeId}`);
+      } else {
+        navigate(`/watch/${film!.id}`);
+      }
     }, 450);
+  };
+
+  // For series: find the episode to resume (first incomplete or first)
+  const getResumeEpisode = (): Episode | undefined => {
+    if (!film?.isSeries || !film.episodes?.length) return undefined;
+    const sorted = getSortedEpisodes(film);
+    // Find first episode not completed
+    for (const ep of sorted) {
+      const prog = episodeProgress[ep.id];
+      if (!prog || !prog.completed) return ep;
+    }
+    // All completed, return last
+    return sorted[sorted.length - 1];
   };
 
   const handleLike = async (value: boolean) => {
@@ -73,6 +97,9 @@ export default function FilmDetail() {
   const inList = isInMyList(film.id);
   const duration = film.runtimeSec || film.duration || 0;
   const aiData = film.aiDetails?.data as Record<string, unknown> | undefined;
+  const isSeries = film.isSeries && film.episodes && film.episodes.length > 0;
+  const sortedEpisodes = isSeries ? getSortedEpisodes(film) : [];
+  const resumeEpisode = getResumeEpisode();
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -147,15 +174,13 @@ export default function FilmDetail() {
                 transition={{ delay: 0.15 }}
               >
                 {film.year > 0 && <span className="font-medium text-primary">{film.year}</span>}
-                {duration > 0 && <span>{formatDuration(duration)}</span>}
+                {isSeries && <span className="rounded border border-primary/40 px-1.5 py-0.5 text-xs font-medium text-primary">Series · {sortedEpisodes.length} Episodes</span>}
+                {!isSeries && duration > 0 && <span>{formatDuration(duration)}</span>}
                 {film.certification && film.certification !== "Unrated" && (
                   <span className="rounded border border-muted-foreground/40 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
                     {film.certification}
                   </span>
                 )}
-                {film.width && film.height ? (
-                  <span className="text-xs">{film.width}×{film.height}</span>
-                ) : null}
               </motion.div>
 
               {/* Genres */}
@@ -194,11 +219,14 @@ export default function FilmDetail() {
                 transition={{ delay: 0.3 }}
               >
                 <button
-                  onClick={handlePlay}
+                  onClick={() => handlePlay(resumeEpisode?.id)}
                   className="flex items-center gap-2 rounded bg-foreground px-8 py-3 text-lg font-semibold text-background transition-opacity hover:opacity-80"
                 >
                   <Play size={22} fill="currentColor" />
-                  Play
+                  {isSeries && resumeEpisode
+                    ? `Play ${episodeLabel(resumeEpisode)}`
+                    : "Play"
+                  }
                 </button>
                 <button
                   onClick={() => toggleMyList(film.id)}
@@ -261,6 +289,63 @@ export default function FilmDetail() {
                 </motion.div>
               )}
             </div>
+
+            {/* Episodes list for series */}
+            {isSeries && (
+              <motion.div
+                className="mt-10 max-w-3xl"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+              >
+                <h3 className="mb-4 text-xl font-semibold text-foreground">Episodes</h3>
+                <div className="space-y-2">
+                  {sortedEpisodes.map((ep) => {
+                    const prog = episodeProgress[ep.id];
+                    const pct = prog?.completionPct || 0;
+                    const isCompleted = prog?.completed || false;
+                    return (
+                      <button
+                        key={ep.id}
+                        onClick={() => handlePlay(ep.id)}
+                        className="group flex w-full items-center gap-4 rounded-lg bg-card/50 px-4 py-3 text-left transition hover:bg-card/80 border border-border/30"
+                      >
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-secondary text-foreground/70 group-hover:bg-primary group-hover:text-primary-foreground transition">
+                          <Play size={16} fill="currentColor" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-foreground">
+                              {episodeLabel(ep)}
+                            </span>
+                            {ep.title && (
+                              <span className="text-sm text-muted-foreground truncate">
+                                — {ep.title}
+                              </span>
+                            )}
+                          </div>
+                          {pct > 0 && (
+                            <div className="mt-1 h-1 w-full max-w-[200px] rounded bg-muted overflow-hidden">
+                              <div
+                                className="h-full rounded bg-primary transition-all"
+                                style={{ width: `${Math.min(pct, 100)}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-shrink-0 text-xs text-muted-foreground">
+                          {isCompleted ? (
+                            <span className="text-primary">✓ Watched</span>
+                          ) : pct > 0 ? (
+                            <span>{Math.round(pct)}%</span>
+                          ) : null}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -50,6 +50,16 @@ export function normalizeGenres(raw: string[]): Genre[] {
 
 // ── Film type & helpers (no more mock data) ──
 
+export interface Episode {
+  id: string;
+  season: number;
+  episode: number;
+  fileName: string;
+  storagePath: string;
+  fileSize?: number;
+  title?: string;
+}
+
 export interface Film {
   id: string;
   officialTitle?: string;
@@ -72,6 +82,8 @@ export interface Film {
   subtitlePath?: string;
   width?: number;
   height?: number;
+  isSeries?: boolean;
+  episodes?: Episode[];
   aiDetails?: {
     generatedAt: string;
     model: string;
@@ -115,11 +127,23 @@ export function filmTitle(f: Film): string {
   );
 }
 
-// Resolve video URL
-export function filmVideoUrl(f: Film): string {
+// Resolve video URL (for standalone films)
+export function filmVideoUrl(f: Film, episode?: Episode): string {
+  if (episode?.storagePath) return `${API}${episode.storagePath}`;
   if (f.storagePath) return `${API}${f.storagePath}`;
   if (f.videoUrl) return f.videoUrl;
   return "";
+}
+
+// Get sorted episodes for a series
+export function getSortedEpisodes(f: Film): Episode[] {
+  if (!f.episodes?.length) return [];
+  return [...f.episodes].sort((a, b) => a.season - b.season || a.episode - b.episode);
+}
+
+// Format episode label
+export function episodeLabel(ep: Episode): string {
+  return `S${String(ep.season).padStart(2, "0")}E${String(ep.episode).padStart(2, "0")}`;
 }
 
 // Resolve poster URL (prepend API base if relative path)

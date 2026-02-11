@@ -219,6 +219,12 @@ Return JSON in this exact format:
       if (Array.isArray(parsed.genres)) f.genres = normalizeGenres(parsed.genres);
       if (typeof parsed.certification === "string") f.certification = parsed.certification;
 
+      // If AI says it's a series, mark it
+      if (parsed.isSeries === true && !f.isSeries) {
+        f.isSeries = true;
+        if (!f.episodes) f.episodes = [];
+      }
+
       // Use local poster path if downloaded, otherwise keep remote URL
       if (localPosterPath) {
         f.posterPath = localPosterPath;

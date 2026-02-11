@@ -104,8 +104,9 @@ export async function fetchWatchHistory(profileId: string): Promise<DbWatchHisto
   return api(`/api/profiles/${profileId}/watch-history`);
 }
 
-export async function getWatchProgress(profileId: string, filmId: string): Promise<DbWatchHistory | null> {
-  return api(`/api/profiles/${profileId}/film/${filmId}/progress`);
+export async function getWatchProgress(profileId: string, filmId: string, episodeId?: string): Promise<DbWatchHistory | null> {
+  const key = episodeId ? `${filmId}:${episodeId}` : filmId;
+  return api(`/api/profiles/${profileId}/film/${key}/progress`);
 }
 
 export async function updateWatchProgress(
@@ -113,9 +114,11 @@ export async function updateWatchProgress(
   filmId: string,
   positionSec: number,
   totalWatchedDeltaSec: number,
-  durationSec: number
+  durationSec: number,
+  episodeId?: string
 ) {
-  return api(`/api/profiles/${profileId}/film/${filmId}/progress`, {
+  const key = episodeId ? `${filmId}:${episodeId}` : filmId;
+  return api(`/api/profiles/${profileId}/film/${key}/progress`, {
     method: "POST",
     body: JSON.stringify({ positionSec, totalWatchedDeltaSec, durationSec }),
   });
@@ -127,12 +130,19 @@ export async function logWatchEvent(
   profileId: string,
   filmId: string,
   eventType: "PLAY" | "PAUSE" | "STOP" | "ENDED",
-  positionSec: number
+  positionSec: number,
+  episodeId?: string
 ) {
-  return api(`/api/profiles/${profileId}/film/${filmId}/event`, {
+  const key = episodeId ? `${filmId}:${episodeId}` : filmId;
+  return api(`/api/profiles/${profileId}/film/${key}/event`, {
     method: "POST",
     body: JSON.stringify({ type: eventType, positionSec }),
   });
+}
+
+// Get all episode progress for a series
+export async function getSeriesProgress(profileId: string, filmId: string): Promise<Record<string, DbWatchHistory>> {
+  return api(`/api/profiles/${profileId}/film/${filmId}/series-progress`);
 }
 
 // ── Continue Watching ──

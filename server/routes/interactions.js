@@ -138,6 +138,23 @@ router.get("/:id/continue-watching", (req, res) => {
   res.json(items);
 });
 
+// ── Series Episode Progress (all episodes for a series) ──
+
+router.get("/:id/film/:filmId/series-progress", (req, res) => {
+  const db = read();
+  const inter = db.interactions[req.params.id];
+  if (!inter?.watchHistory) return res.json({});
+  const prefix = req.params.filmId + ":";
+  const result = {};
+  for (const [key, data] of Object.entries(inter.watchHistory)) {
+    if (key.startsWith(prefix)) {
+      const episodeId = key.substring(prefix.length);
+      result[episodeId] = data;
+    }
+  }
+  res.json(result);
+});
+
 // ── Events ──
 
 router.post("/:id/film/:filmId/event", async (req, res) => {
