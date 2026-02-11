@@ -97,7 +97,7 @@ Return JSON in this exact format:
 
       f.aiDetails = {
         generatedAt,
-        model: "gemini-1.5-flash",
+        model: "gemini-2.0-flash",
         data: parsed,
       };
     });
@@ -106,7 +106,7 @@ Return JSON in this exact format:
       success: true,
       aiDetails: {
         generatedAt,
-        model: "gemini-1.5-flash",
+        model: "gemini-2.0-flash",
         data: parsed,
       },
     });
