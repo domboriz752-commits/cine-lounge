@@ -26,12 +26,18 @@ export default function FilmCard({ film }: FilmCardProps) {
       whileHover={{ scale: 1.05, zIndex: 10 }}
       onClick={() => navigate(`/film/${film.id}`)}
     >
-      <div className={`aspect-[2/3] w-full bg-gradient-to-br ${filmPosterColor(film)} flex items-end`}>
-        <div className="w-full p-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-white/60">{film.year > 0 ? film.year : ""}</p>
-          <p className="mt-0.5 text-sm font-semibold leading-tight text-white">{title}</p>
+      {film.posterUrl ? (
+        <div className="aspect-[2/3] w-full overflow-hidden">
+          <img src={film.posterUrl} alt={title} className="h-full w-full object-cover" />
         </div>
-      </div>
+      ) : (
+        <div className={`aspect-[2/3] w-full bg-gradient-to-br ${filmPosterColor(film)} flex items-end`}>
+          <div className="w-full p-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-white/60">{film.year > 0 ? film.year : ""}</p>
+            <p className="mt-0.5 text-sm font-semibold leading-tight text-white">{title}</p>
+          </div>
+        </div>
+      )}
 
       {hovered && (
         <motion.div

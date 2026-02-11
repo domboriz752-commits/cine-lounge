@@ -19,24 +19,26 @@ router.post("/:id/ai/enrich", async (req, res) => {
     }
 
     const prompt = `
-You are generating AI enrichment for a movie.
+You are an AI film metadata generator. Given ONLY a filename, generate complete metadata for this movie/show.
 
 Rules:
-- Do NOT claim you watched the film.
-- Base output only on the metadata provided.
-- Do NOT invent official age ratings.
-- Output STRICT JSON only.
-- No markdown. No explanations.
+- Identify the film from the filename (it often contains the title, year, quality info).
+- If you recognize the title, use your knowledge to fill in accurate metadata.
+- If you don't recognize it, make reasonable inferences from the filename.
+- For posterUrl: find a real publicly accessible poster/thumbnail image URL from TMDB, IMDb, or similar. Use the format https://image.tmdb.org/t/p/w500/... if you know the TMDB poster path, or provide any known working poster URL. If unsure, return "".
+- Do NOT invent age ratings — use real ones or "Unrated".
+- Output STRICT JSON only. No markdown. No explanations.
 
-Metadata:
-Title: ${film.displayTitle || film.officialTitle || film.title || "Unknown"}
-Year: ${film.year || "Unknown"}
-Genres: ${(film.genres || []).join(", ") || "Unknown"}
-Description: ${film.description || "None"}
-Runtime (minutes): ${Math.round((film.runtimeSec || film.runtime || 0) / 60)}
+Filename: ${film.fileName || film.displayTitle || film.officialTitle || "Unknown"}
 
 Return JSON in this exact format:
 {
+  "title": "",
+  "year": 0,
+  "description": "",
+  "genres": [],
+  "certification": "",
+  "posterUrl": "",
   "logline": "",
   "shortSummary": "",
   "themes": [],
@@ -59,24 +61,38 @@ Return JSON in this exact format:
     const rawText = response.output_text;
     let parsed;
     try {
-      parsed = JSON.parse(rawText);
+      // Strip markdown code fences if present
+      const cleaned = rawText.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      parsed = JSON.parse(cleaned);
     } catch {
       console.error("AI returned invalid JSON:", rawText);
       return res.status(500).json({ error: "AI returned invalid JSON", raw: rawText });
     }
 
-    const aiDetails = {
-      generatedAt: new Date().toISOString(),
-      model: "gpt-4.1-mini",
-      data: parsed,
-    };
-
+    // Update the film with AI-generated metadata
     await update(db => {
       const f = db.films?.find(f => f.id === filmId);
-      if (f) f.aiDetails = aiDetails;
+      if (!f) return;
+
+      // Set core metadata from AI
+      if (parsed.title) {
+        f.officialTitle = parsed.title;
+        f.displayTitle = parsed.title;
+      }
+      if (parsed.year) f.year = parsed.year;
+      if (parsed.description) f.description = parsed.description;
+      if (parsed.genres?.length) f.genres = parsed.genres;
+      if (parsed.certification) f.certification = parsed.certification;
+      if (parsed.posterUrl) f.posterUrl = parsed.posterUrl;
+
+      f.aiDetails = {
+        generatedAt: new Date().toISOString(),
+        model: "gpt-4.1-mini",
+        data: parsed,
+      };
     });
 
-    res.json({ success: true, aiDetails });
+    res.json({ success: true, aiDetails: { generatedAt: new Date().toISOString(), model: "gpt-4.1-mini", data: parsed } });
   } catch (err) {
     console.error("AI enrichment error:", err);
     res.status(500).json({ error: err.message || "AI enrichment failed" });
