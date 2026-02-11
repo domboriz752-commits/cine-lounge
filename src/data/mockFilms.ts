@@ -72,6 +72,14 @@ export function filmVideoUrl(f: Film): string {
   return "";
 }
 
+// Resolve poster URL (prepend API base if relative path)
+export function filmPosterUrl(f: Film): string {
+  const raw = f.posterPath || f.posterUrl || "";
+  if (!raw) return "";
+  if (raw.startsWith("http")) return raw;
+  return `${API}${raw}`;
+}
+
 // Resolve poster gradient (fallback)
 const PALETTE = [
   "from-blue-900 to-indigo-950",

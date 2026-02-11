@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Play, Plus, Check } from "lucide-react";
-import { type Film, filmTitle, filmPosterColor, formatDuration } from "@/data/mockFilms";
+import { type Film, filmTitle, filmPosterColor, filmPosterUrl, formatDuration } from "@/data/mockFilms";
 import { useProfile } from "@/contexts/ProfileContext";
 import { motion } from "framer-motion";
 
@@ -15,6 +15,7 @@ export default function FilmCard({ film }: FilmCardProps) {
   const [hovered, setHovered] = useState(false);
   const inList = isInMyList(film.id);
   const title = filmTitle(film);
+  const poster = filmPosterUrl(film);
   const duration = film.runtimeSec || film.duration || 0;
 
   return (
@@ -26,9 +27,9 @@ export default function FilmCard({ film }: FilmCardProps) {
       whileHover={{ scale: 1.05, zIndex: 10 }}
       onClick={() => navigate(`/film/${film.id}`)}
     >
-      {film.posterUrl ? (
+      {poster ? (
         <div className="aspect-[2/3] w-full overflow-hidden">
-          <img src={film.posterUrl} alt={title} className="h-full w-full object-cover" />
+          <img src={poster} alt={title} className="h-full w-full object-cover" />
         </div>
       ) : (
         <div className={`aspect-[2/3] w-full bg-gradient-to-br ${filmPosterColor(film)} flex items-end`}>
